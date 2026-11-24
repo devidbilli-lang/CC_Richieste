@@ -229,6 +229,8 @@ table.foglio.tab-tutti td{padding:2px 4px;height:auto;font-size:11.5px;white-spa
 table.tab-tutti td .sub{font-size:10px;line-height:1.1}
 table.tab-tutti td.c-art{max-width:120px}
 table.tab-tutti td.c-comp{max-width:140px}
+table.tab-tutti td.c-st{white-space:nowrap}
+.ce-stag select{width:auto;padding:5px 8px;border:1px solid #c9c9c9;border-radius:6px;font-family:inherit}
 table.tab-tutti td.c-descr{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.tab-tutti td.n,table.tab-tutti td.c-cifra{white-space:nowrap}
 table.tab-tutti .badge-manca{font-size:10.5px;padding:0 6px}
@@ -584,28 +586,42 @@ function prepAnagrafiche(a) {
   S.mot = new Map(a.motivazioni.map(m => [m[0], { resp: m[1], macro: m[2] }]));
   S.art = new Map(a.articoli.map(x => [x[0], x[1]]));
   S.artPrep = new Map(a.articoli.filter(x => x[2]).map(x => [x[0], x[2]])); // preparazione che lavora l'articolo (colonna K del Database)
+  // stagioni di ogni articolo, nell'ordine in cui sono state inserite in Articoli (l'ultima è la più recente)
+  S.stagioniPf = new Map(); S.artSt = new Map();
+  const addSt = (pf, st) => { if (!S.stagioniPf.has(pf)) S.stagioniPf.set(pf, []); const l = S.stagioniPf.get(pf); if (!l.includes(st)) l.push(st); };
+  for (const x of a.articoli) { addSt(x[0], x[3] || ''); S.artSt.set(x[0] + '|' + (x[3] || ''), { descr: x[1], prep: x[2] }); }
+  S.stagioniTutte = [...new Set(a.articoli.map(x => x[3]).filter(Boolean))].sort();
   S.prossimoAcc = a.prossimo_accessori;
   S.opSet = new Set(a.operatori);
-  S.compPerPf = new Map(); S.compSet = new Set();
+  S.compSt = new Map(); S.compSet = new Set();
   for (const c of a.componenti) {
-    if (S.compSet.has(c[0])) continue;
+    const st = c[8] || '', k = c[1] + '|' + st;
+    addSt(c[1], st);
+    if (!S.compSt.has(k)) S.compSt.set(k, []);
+    const l = S.compSt.get(k); if (l.some(x => x.chiave === c[0])) continue;
     S.compSet.add(c[0]);
-    if (!S.compPerPf.has(c[1])) S.compPerPf.set(c[1], []);
-    S.compPerPf.get(c[1]).push({ chiave: c[0], pf: c[1], nome: c[2], tipo: c[3], tm: c[4], npz: c[5], sec: c[6], padre: c[7] || null });
+    l.push({ chiave: c[0], pf: c[1], nome: c[2], tipo: c[3], tm: c[4], npz: c[5], sec: c[6], padre: c[7] || null, stagione: st });
   }
-  for (const [pf, lista] of S.compPerPf) { // ogni rinforzo subito sotto il suo componente principale
+  for (const [k, lista] of S.compSt) { // ogni rinforzo subito sotto il suo componente principale
     const chiavi = new Set(lista.map(c => c.chiave));
     lista.forEach(c => { if (c.padre && !chiavi.has(c.padre)) c.padre = null; });
     const figli = new Map(); lista.filter(c => c.padre).forEach(c => { if (!figli.has(c.padre)) figli.set(c.padre, []); figli.get(c.padre).push(c); });
     lista.forEach(c => { c.nRinf = (figli.get(c.chiave) || []).length; });
-    S.compPerPf.set(pf, lista.filter(c => !c.padre).flatMap(c => [c, ...(figli.get(c.chiave) || [])]));
+    S.compSt.set(k, lista.filter(c => !c.padre).flatMap(c => [c, ...(figli.get(c.chiave) || [])]));
   }
+  // compPerPf: articoli che hanno componenti (quelli della stagione più recente)
+  S.compPerPf = new Map(); for (const pf of S.stagioniPf.keys()) { const l = compsDi(pf); if (l.length) S.compPerPf.set(pf, l); }
   $('#dl-operatori').innerHTML = a.operatori.map(o => `<option value="${esc(o)}">`).join('');
   $('#dl-motivazioni').innerHTML = a.motivazioni.map(m => `<option value="${esc(m[0])}">${esc(m[1] || '')}</option>`).join('');
   $('#dl-articoli').innerHTML = [...S.compPerPf.keys()].map(pf => `<option value="${esc(pf + ' — ' + (S.art.get(pf) || ''))}">`).join('');
   $('#dl-componenti').innerHTML = [...S.compSet].map(k => `<option value="${esc(k)}">`).join('');
 }
 async function caricaAnagrafiche() { prepAnagrafiche(await api('/api/anagrafiche')); }
+// stagioni dell'articolo che hanno componenti; quella proposta è la più recente
+const stagioniCon = pf => (S.stagioniPf.get(pf) || []).filter(st => (S.compSt.get(pf + '|' + st) || []).length);
+const stagDef = pf => { const l = stagioniCon(pf); return l.length ? l[l.length - 1] : ''; };
+const compsDi = (pf, st) => S.compSt.get(pf + '|' + (st || stagDef(pf))) || [];
+const prepDi = (pf, st) => ((S.artSt.get(pf + '|' + (st || stagDef(pf))) || {}).prep) || S.artPrep.get(pf) || '';
 // logo DiMar fisso; in testata piccolo a sinistra con la linea nera che arriva a fine foglio
 const LOGO_DIMAR = 'data:image/png;base64,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';
 // sotto la linea: il logo caricato (una volta sola, dall'amministratore) a sinistra e la data al centro
@@ -807,8 +823,9 @@ async function aggiornaAnaSeServe() {
     // righe nuove già aperte: il menu Componente si aggiorna se l'articolo ora ha componenti (o ne ha di nuovi)
     $$('#r-tab tr.riga-nuova').forEach(tr => {
       const n = S.nuove[Number(tr.dataset.n)], sel = $('select[data-f="componente"]', tr); if (!n || !sel || !n.sku) return;
-      const comps = S.compPerPf.get(n.sku) || [];
-      sel.innerHTML = opzioniComponenti(comps.length ? n.sku : '', n.componente); sel.disabled = !comps.length;
+      const comps = compsDi(n.sku, n.stagione);
+      sel.innerHTML = opzioniComponenti(comps.length ? n.sku : '', n.componente, n.stagione); sel.disabled = !comps.length;
+      const ts = $('td[data-k="stagione"]', tr); if (ts) ts.innerHTML = cellaNuova(n, 'stagione');
     });
   } catch (e) {}
   finally { S.caricoAna = false; }
@@ -858,7 +875,7 @@ async function aggiornaContaElabora() {
 function opzioni(lista, sel, vuota = '—') { return `<option value="">${vuota}</option>` + lista.map(x => `<option ${x === sel ? 'selected' : ''}>${esc(x)}</option>`).join(''); }
 function codiceDaArt(v) { return String(v || '').split('—')[0].trim().toUpperCase(); }
 const COL_FOGLIO = [['numero', 'Codice Richiesta'], ['stato_elab', 'Stato Elaborazione'], ['preparazione', 'Preparazione'], ['data', 'Data'], ['bollettino', 'Bollettino'], ['conceria', 'Conceria'], ['team_leader', 'Team Leader'],
-  ['sku', 'SKU'], ['componente', 'Componente'], ['descrizione', 'Descrizione'], ['pz_ko', 'Pz KO'], ['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['operatore', 'Operatore'],
+  ['sku', 'SKU'], ['stagione', 'Stagione'], ['componente', 'Componente'], ['descrizione', 'Descrizione'], ['pz_ko', 'Pz KO'], ['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['operatore', 'Operatore'],
   ['materiale', 'Materiale Richiesto'], ['note', 'Note'], ['minuti', 'Minuti', 'n'], ['totale_eur', 'Totale €', 'n'], ['stato', 'Stato Richiesta']];
 // stesse formattazioni condizionali del foglio Google
 function classeCella(k, r) {
@@ -918,6 +935,7 @@ function vistaFoglio() {
       <div class="pillole">${PERIODI.map(([k, t]) => `<button data-p="${k}" class="${!f.sett && f.periodo === k ? 'att' : ''}">${t}</button>`).join('')}</div>
       <select id="r-stato" class="filtro-sel" title="Stato">${[['', 'Tutti gli stati'], ['aperte', 'Aperte'], ['da_elaborare', 'Da elaborare'], ['in_corso', 'In corso'], ['chiusa', 'Chiuse'], ['non_richiedere', 'Non richiedere']]
         .map(([k, t]) => `<option value="${k}" ${f.stato === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      ${(S.stagioniTutte || []).length > 1 ? `<select id="r-stag" class="filtro-sel ${f.stagione ? 'att' : ''}" title="Stagione">${opzioni(S.stagioniTutte, f.stagione || '', 'Tutte le stagioni')}</select>` : ''}
       <span class="sub" id="r-info"></span>
       <div class="spazio" style="flex:1"></div>
       <button class="icona" onclick="esportaRighe()" title="Esporta CSV">⤓ CSV</button>
@@ -983,12 +1001,14 @@ async function cercaRighe(altre) {
   if (!$('#r-q')) return;
   f.sett = $('#r-sett') ? $('#r-sett').value : ''; ({ dal: f.dal, al: f.al } = intervalloFiltro(f)); f.numero = ''; f.stato = $('#r-stato').value; f.q = $('#r-q').value.trim();
   if ($('#r-scheda')) f.scheda = $('#r-scheda').value;
+  f.stagione = $('#r-stag') ? $('#r-stag').value : '';
+  if ($('#r-stag')) $('#r-stag').classList.toggle('att', !!f.stagione);
   aggiornaPiu();
   const offset = altre ? S.cache.righe.length : 0;
   const seq = S.seqRighe = (S.seqRighe || 0) + 1;
   $('#r-info').textContent = 'Caricamento…';
   try {
-    const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 500, offset } });
+    const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, stagione: f.stagione || '', q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 500, offset } });
     if (!$('#r-tab') || seq !== S.seqRighe) return; // vista cambiata o risposta superata da una più recente
     S.cache.righe = altre ? S.cache.righe.concat(r.righe) : r.righe;
     S.cache.righeTot = r.totali;
@@ -1026,29 +1046,30 @@ function salvaNuoveLocale() { store.set(chiaveNuove(), JSON.stringify({ scheda: 
 const SEP_COMP = ' - ';
 const pfDa = chiave => String(chiave || '').split(SEP_COMP)[0].trim();
 const diPf = (chiave, pf) => !!pf && String(chiave || '').startsWith(pf + SEP_COMP);
-function compNuova(n) { return (S.compPerPf.get(n.sku) || []).find(c => c.chiave === n.componente); }
+function compNuova(n) { return compsDi(n.sku, n.stagione).find(c => c.chiave === n.componente); }
 function pseudoRiga(n) { const c = compNuova(n); return { ...n, tm: c ? c.tm : null, stato_calc: n.stato_elab === 'Non Richiedere' ? 'Non richiedere' : 'Da elaborare' }; }
 function mancanti(n) {
   const m = [];
   if (!n.data) m.push('data');
   if (!S.compPerPf.has(n.sku)) m.push('sku');
-  if (!S.compSet.has(n.componente) || !diPf(n.componente, n.sku)) m.push('componente');
+  if (n.sku && S.compPerPf.has(n.sku) && n.stagione && !stagioniCon(n.sku).includes(n.stagione)) m.push('stagione');
+  if (!S.compSet.has(n.componente) || !diPf(n.componente, n.sku) || !compNuova(n)) m.push('componente');
   if (!(Number(n.pz_ko) > 0)) m.push('pz_ko');
   if (!S.mot.has(String(n.motivazione || '').trim())) m.push('motivazione');
   if (n.operatore && !S.opSet.has(n.operatore.trim())) m.push('operatore');
   if (n.team_leader && !S.opSet.has(n.team_leader.trim())) m.push('team_leader');
   return m;
 }
-const NOMI_CAMPI = { data: 'data', sku: 'SKU', componente: 'componente', pz_ko: 'Pz KO', motivazione: 'motivazione', operatore: 'operatore (non in elenco)', team_leader: 'team leader (non in elenco)' };
+const NOMI_CAMPI = { data: 'data', sku: 'SKU', stagione: 'stagione', componente: 'componente', pz_ko: 'Pz KO', motivazione: 'motivazione', operatore: 'operatore (non in elenco)', team_leader: 'team leader (non in elenco)' };
 // righe nuove: ogni valore si può copiare su tutte le altre righe nuove (⇊), e una riga si può duplicare (⧉)
-const CAMPI_REPLICA = ['stato_elab', 'preparazione', 'data', 'bollettino', 'conceria', 'team_leader', 'sku', 'componente', 'pz_ko', 'motivazione', 'operatore', 'materiale', 'note'];
+const CAMPI_REPLICA = ['stato_elab', 'preparazione', 'data', 'bollettino', 'conceria', 'team_leader', 'sku', 'stagione', 'componente', 'pz_ko', 'motivazione', 'operatore', 'materiale', 'note'];
 function cellaNuova(n, k) {
   const rep = S.nuove.length > 1 && CAMPI_REPLICA.includes(k) && (k !== 'stato_elab' || isMag())
     ? `<button type="button" class="replica" data-rep="${k}" tabindex="-1" title="Copia questo valore su tutte le righe nuove">⇊</button>` : '';
   return cellaNuovaBase(n, k) + rep;
 }
 function cellaNuovaBase(n, k) {
-  const comps = S.compPerPf.get(n.sku) || [];
+  const comps = compsDi(n.sku, n.stagione);
   switch (k) {
     case 'numero': return '<span class="badge-nuova">NUOVA</span>';
     case 'stato_elab': return isMag() ? `<select data-f="stato_elab">${['Si', 'Non Richiedere'].map(x => `<option ${n.stato_elab === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`
@@ -1058,7 +1079,9 @@ function cellaNuovaBase(n, k) {
     case 'bollettino': return `<input data-f="bollettino" value="${esc(n.bollettino)}" style="width:96px">`;
     case 'conceria': return `<select data-f="conceria" style="width:112px">${opzioni(S.ana.concerie, n.conceria)}</select>`;
     case 'team_leader': return `<input data-f="team_leader" list="dl-operatori" value="${esc(n.team_leader)}" style="width:165px">`;
-    case 'componente': return `<select data-f="componente" style="width:235px" ${comps.length ? '' : 'disabled'}>${opzioniComponenti(comps.length ? n.sku : '', n.componente)}</select>`;
+    case 'componente': return `<select data-f="componente" style="width:235px" ${comps.length ? '' : 'disabled'}>${opzioniComponenti(comps.length ? n.sku : '', n.componente, n.stagione)}</select>`;
+    case 'stagione': { const l = stagioniCon(n.sku), cur = n.stagione || stagDef(n.sku);
+      return `<select data-f="stagione" style="width:84px" ${l.length ? '' : 'disabled'} title="Stagione dei componenti">${l.length ? l.map(s => `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s || '—')}</option>`).join('') : '<option value="">—</option>'}</select>`; }
     case 'sku': return `<input data-f="sku" list="dl-articoli" value="${esc(n.sku)}" placeholder="Articolo" autocomplete="off" style="width:112px">`;
     case 'descrizione': return esc(S.art.get(n.sku) || '');
     case 'pz_ko': return `<input data-f="pz_ko" type="number" min="1" step="1" inputmode="numeric" value="${esc(n.pz_ko)}" style="width:72px;text-align:center">`;
@@ -1091,9 +1114,10 @@ function replicaCampo(j, f) {
   let fatte = 0, saltate = 0;
   S.nuove.forEach((x, i) => {
     if (i === j) return;
-    if (f === 'componente' && x.sku !== src.sku) { saltate++; return; } // il componente vale solo per lo stesso articolo
+    if ((f === 'componente' || f === 'stagione') && x.sku !== src.sku) { saltate++; return; } // componente e stagione valgono solo per lo stesso articolo
     x[f] = src[f]; fatte++;
-    if (f === 'sku' && !diPf(x.componente, src.sku)) x.componente = '';
+    if (f === 'sku') { if (!diPf(x.componente, src.sku)) x.componente = ''; x.stagione = src.stagione; }
+    if (!compNuova(x)) x.componente = '';
   });
   salvaNuoveLocale(); ridisegnaNuoveFermo(); aggiornaBarraNuove();
   toast(`Copiato su ${fatte} ${fatte === 1 ? 'riga' : 'righe'}${saltate ? ` (${saltate} con un altro SKU saltate)` : ''}`, 'ok');
@@ -1122,11 +1146,17 @@ function eventiNuove() {
     if (f === 'sku') {
       if (e.type === 'input' && !S.compPerPf.has(codiceDaArt(el.value))) { n.sku = codiceDaArt(el.value); salvaNuoveLocale(); return; }
       const cod = codiceDaArt(el.value); n.sku = cod; el.value = cod;
-      if (!diPf(n.componente, cod)) n.componente = '';
-      if (!n.preparazione && S.artPrep.get(cod)) { n.preparazione = S.artPrep.get(cod); const tp = $('td[data-k="preparazione"]', tr); if (tp) tp.innerHTML = cellaNuova(n, 'preparazione'); }
+      if (!stagioniCon(cod).includes(n.stagione)) n.stagione = stagDef(cod); // stagione più recente dell'articolo
+      if (!diPf(n.componente, cod) || !compNuova(n)) n.componente = '';
+      if (!n.preparazione && prepDi(cod, n.stagione)) { n.preparazione = prepDi(cod, n.stagione); const tp = $('td[data-k="preparazione"]', tr); if (tp) tp.innerHTML = cellaNuova(n, 'preparazione'); }
+      const ts = $('td[data-k="stagione"]', tr); if (ts) ts.innerHTML = cellaNuova(n, 'stagione');
       const td = $('td[data-k="componente"]', tr); td.innerHTML = cellaNuova(n, 'componente');
       el.classList.toggle('errato', !!cod && !S.compPerPf.has(cod));
       if (S.compPerPf.has(cod) && e.type === 'change') $('select', td).focus();
+    } else if (f === 'stagione') { // altra stagione: il componente resta se esiste anche lì
+      n.stagione = el.value;
+      if (!compNuova(n)) n.componente = '';
+      const td = $('td[data-k="componente"]', tr); if (td) td.innerHTML = cellaNuova(n, 'componente');
     } else n[f] = el.value;
     aggiornaCelleNuova(tr, n);
     salvaNuoveLocale(); aggiornaBarraNuove();
@@ -1197,8 +1227,9 @@ function aggiungiNuova() {
   if (!puoAggiungere()) return toast('Scegli prima la scheda', 'err');
   if (!S.nuove.length) S.nuoveScheda = schedaFoglio(); // si possono aprire più righe nuove e salvarle tutte insieme
   const p = S.nuove.length ? S.nuove[S.nuove.length - 1] : (S.ultimi || {});
-  S.nuove.push({ stato_elab: isMag() ? (p.stato_elab || 'Si') : 'Si', preparazione: p.preparazione || S.artPrep.get(p.sku || '') || '', data: p.data || oggi(), bollettino: p.bollettino || '', conceria: p.conceria || '',
-    team_leader: p.team_leader ?? (S.opSet.has(S.profilo.nome) ? S.profilo.nome : ''), sku: p.sku || '', componente: '', pz_ko: '', motivazione: '', operatore: '', materiale: '', note: '' });
+  const st = p.sku && stagioniCon(p.sku).includes(p.stagione) ? p.stagione : (p.sku ? stagDef(p.sku) : '');
+  S.nuove.push({ stato_elab: isMag() ? (p.stato_elab || 'Si') : 'Si', preparazione: p.preparazione || (p.sku ? prepDi(p.sku, st) : ''), data: p.data || oggi(), bollettino: p.bollettino || '', conceria: p.conceria || '',
+    team_leader: p.team_leader ?? (S.opSet.has(S.profilo.nome) ? S.profilo.nome : ''), sku: p.sku || '', stagione: st, componente: '', pz_ko: '', motivazione: '', operatore: '', materiale: '', note: '' });
   salvaNuoveLocale();
   disegnaRighe();
   const j = S.nuove.length - 1, tr = $(`#r-tab tr.riga-nuova[data-n="${j}"]`), w = $('#r-tab .tabwrap');
@@ -1223,7 +1254,7 @@ async function salvaNuove() {
   const inc = segnaMancanti();
   if (inc) { primoMancante(); return toast(`${inc === 1 ? 'Una riga non è completa' : inc + ' righe non sono complete'}: compila i campi evidenziati in rosso`, 'err'); }
   const righe = S.nuove.map(n => ({ preparazione: n.preparazione || '', data: n.data, bollettino: String(n.bollettino || '').trim(), conceria: n.conceria, team_leader: String(n.team_leader || '').trim(),
-    componente: n.componente, pz_ko: Number(n.pz_ko), motivazione: String(n.motivazione).trim(), operatore: String(n.operatore || '').trim(), materiale: n.materiale,
+    componente: n.componente, stagione: n.stagione || stagDef(n.sku), pz_ko: Number(n.pz_ko), motivazione: String(n.motivazione).trim(), operatore: String(n.operatore || '').trim(), materiale: n.materiale,
     stato_elab: n.stato_elab || 'Si', note: String(n.note || '').trim() }));
   const b = $('#bn-salva'); b.disabled = true;
   let salvate = 0;
@@ -1263,12 +1294,18 @@ function disegnaRighe() {
 function puoModificare(r) { return isMag() || (r.scheda === S.profilo.nome && !r.numero); }
 function puoAggiungere() { return !!schedaFoglio() && (!S.nuove.length || S.nuoveScheda === schedaFoglio()); }
 function apriRiga(i, lista) { formRiga((lista || S.cache.righe)[i]); }
-function opzioniComponenti(pf, sel) {
-  const comps = S.compPerPf.get(pf) || [];
+function opzioniComponenti(pf, sel, st) {
+  const comps = pf ? compsDi(pf, st) : [];
   let html = `<option value="">${pf ? (comps.length ? 'Scegli il componente…' : 'Nessun componente per questo articolo') : 'Scegli prima il codice articolo'}</option>`;
   html += comps.map(c => `<option value="${esc(c.chiave)}" ${c.chiave === sel ? 'selected' : ''}>${c.padre ? '\u00a0\u00a0\u00a0\u00a0↳ ' : ''}${esc(c.nome)}${c.nRinf ? ` (+${c.nRinf} rinforz${c.nRinf > 1 ? 'i' : 'o'})` : ''}</option>`).join('');
   if (sel && !comps.some(c => c.chiave === sel)) html += `<option value="${esc(sel)}" selected>${esc(sel)} (non in anagrafica)</option>`;
   return html;
+}
+// stagioni con componenti dell'articolo (menu del modulo riga)
+function opzioniStagione(pf, sel) {
+  const l = stagioniCon(pf);
+  if (!l.length) return '<option value="">—</option>';
+  return l.map(s => `<option value="${esc(s)}" ${s === sel ? 'selected' : ''}>${esc(s || '—')}</option>`).join('') + (sel && !l.includes(sel) ? `<option value="${esc(sel)}" selected>${esc(sel)} (senza componenti)</option>` : '');
 }
 function infoMot(m) { const x = S.mot.get(m); return x ? `Responsabilità: <b>${esc(x.resp || '—')}</b> · Macro categoria: <b>${esc(x.macro || '—')}</b>` : (m ? '<span style="color:var(--rosso)">Motivazione non in elenco</span>' : ''); }
 
@@ -1322,7 +1359,7 @@ function anteprima() {
   const b = leggiForm(), base = S.form.base || {};
   const sku = b.componente ? pfDa(b.componente) : codiceDaArt($('#e-art').value);
   const m = S.mot.get(b.motivazione);
-  const comp = (S.compPerPf.get(sku) || []).find(c => c.chiave === b.componente);
+  const comp = compsDi(sku, b.stagione).find(c => c.chiave === b.componente);
   const r = { ...base, ...b, _nuova: S.form.nuova, sku, tm: comp ? comp.tm : base.tm, descrizione: S.art.get(sku) || base.descrizione || '', responsabilita: m ? m.resp : (b.motivazione ? '' : base.responsabilita),
     numero: $('#e-numero') ? $('#e-numero').value : base.numero, scheda: base.scheda || S.cache.formScheda,
     stato_calc: S.form.nuova ? (b.stato_elab === 'Non Richiedere' ? 'Non richiedere' : 'Da elaborare') : base.stato_calc };
@@ -1334,6 +1371,7 @@ function formRiga(r, pre) {
   const mod = nuova || puoModificare(r);
   const ro = mod ? '' : 'readonly', dis = mod ? '' : 'disabled';
   const pf = d.sku || (d.componente ? pfDa(d.componente) : '');
+  const stF = d.stagione || stagDef(pf);
   const scheda = nuova ? (S.cache.schedaDup || schedaFoglio()) : r.scheda;
   S.cache.schedaDup = null;
   S.cache.formScheda = scheda;
@@ -1341,13 +1379,14 @@ function formRiga(r, pre) {
   const corpo = `
     <div class="griglia">
       ${!nuova && isMag() ? `<label class="campo">Codice richiesta<input id="e-numero" value="${esc(r.numero || '')}"></label>` : ''}
-      <label class="campo">Preparazione<select id="e-prep" ${dis}>${opzioni(S.ana.preparazioni || [], d.preparazione ?? (pf ? S.artPrep.get(pf) : ''))}</select></label>
+      <label class="campo">Preparazione<select id="e-prep" ${dis}>${opzioni(S.ana.preparazioni || [], d.preparazione ?? (pf ? prepDi(pf, stF) : ''))}</select></label>
       <label class="campo">Data<input type="date" id="e-data" value="${esc(d.data || '')}" max="${giorniFa(-7)}" ${ro}></label>
       <label class="campo">Bollettino<input id="e-boll" value="${esc(d.bollettino || '')}" ${ro}></label>
       <label class="campo">Conceria<select id="e-conc" ${dis}>${opzioni(S.ana.concerie, d.conceria)}</select></label>
       <label class="campo">Team leader<input id="e-tl" list="dl-operatori" value="${esc(d.team_leader || '')}" placeholder="Cerca…" ${ro}></label>
       <label class="campo largo">Codice articolo<input id="e-art" list="dl-articoli" value="${esc(pf ? pf + ' — ' + (S.art.get(pf) || '') : '')}" placeholder="Codice PF o descrizione…" autocomplete="off" ${ro}></label>
-      <label class="campo largo">Componente<select id="e-comp" ${dis || (pf ? '' : 'disabled')}>${opzioniComponenti(pf, d.componente)}</select></label>
+      <label class="campo">Stagione<select id="e-stag" ${dis || (pf ? '' : 'disabled')}>${opzioniStagione(pf, stF)}</select></label>
+      <label class="campo largo">Componente<select id="e-comp" ${dis || (pf ? '' : 'disabled')}>${opzioniComponenti(pf, d.componente, stF)}</select></label>
       <label class="campo">Pz KO<input type="number" min="0" step="1" id="e-pz" value="${esc(d.pz_ko ?? '')}" ${ro}></label>
       <label class="campo largo">Motivazione<input id="e-mot" list="dl-motivazioni" value="${esc(d.motivazione || '')}" placeholder="Cerca motivazione…" ${ro}><span class="sub" id="e-motinfo" style="font-weight:500">${infoMot(d.motivazione)}</span></label>
       <label class="campo">Operatore<input id="e-op" list="dl-operatori" value="${esc(d.operatore || '')}" placeholder="Cerca…" ${ro}></label>
@@ -1372,16 +1411,23 @@ function formRiga(r, pre) {
   if (cont === '#pannello') disegnaRighe(); // mostra la riga in rilievo
   if (!mod) return;
   const art = $('#e-art');
-  const aggiornaComp = () => {
+  const aggiornaComp = (soloStagione) => {
     const p = codiceDaArt(art.value);
     const cur = $('#e-comp').value;
-    $('#e-comp').innerHTML = opzioniComponenti(S.compPerPf.has(p) ? p : '', diPf(cur, p) ? cur : '');
-    if ($('#e-prep') && !$('#e-prep').value && S.artPrep.get(p)) $('#e-prep').value = S.artPrep.get(p);
+    if (soloStagione !== true) { // altro articolo: la stagione torna la più recente (o resta se l'articolo ce l'ha)
+      const st0 = $('#e-stag').value;
+      $('#e-stag').innerHTML = opzioniStagione(p, stagioniCon(p).includes(st0) ? st0 : stagDef(p));
+      $('#e-stag').disabled = !S.compPerPf.has(p);
+    }
+    const st = $('#e-stag').value;
+    $('#e-comp').innerHTML = opzioniComponenti(S.compPerPf.has(p) ? p : '', diPf(cur, p) && compsDi(p, st).some(c => c.chiave === cur) ? cur : '', st);
+    if ($('#e-prep') && !$('#e-prep').value && prepDi(p, st)) $('#e-prep').value = prepDi(p, st);
     $('#e-comp').disabled = !S.compPerPf.has(p);
     art.classList.toggle('errato', !!p && !S.compPerPf.has(p));
     anteprima();
   };
   art.addEventListener('change', aggiornaComp);
+  $('#e-stag').addEventListener('change', () => aggiornaComp(true));
   art.addEventListener('input', () => { if (S.compPerPf.has(codiceDaArt(art.value))) aggiornaComp(); });
   $('#e-mot').addEventListener('input', e => { $('#e-motinfo').innerHTML = infoMot(e.target.value.trim()); e.target.classList.remove('errato'); });
   const box = $(cont);
@@ -1392,7 +1438,7 @@ function formRiga(r, pre) {
 }
 function leggiForm() {
   return { preparazione: $('#e-prep').value, data: $('#e-data').value, bollettino: $('#e-boll').value.trim(), conceria: $('#e-conc').value, team_leader: $('#e-tl').value.trim(),
-    componente: $('#e-comp').value, pz_ko: $('#e-pz').value, motivazione: $('#e-mot').value.trim(), operatore: $('#e-op').value.trim(),
+    componente: $('#e-comp').value, stagione: $('#e-stag') ? $('#e-stag').value : '', pz_ko: $('#e-pz').value, motivazione: $('#e-mot').value.trim(), operatore: $('#e-op').value.trim(),
     materiale: $('#e-mat').value, stato_elab: $('#e-stato').value, note: $('#e-note').value.trim() };
 }
 function validaForm(b) {
@@ -1420,7 +1466,7 @@ async function salvaForm(id, altra) {
     } else {
       b.pz_ko = Number(b.pz_ko);
       await api('/api/righe', { method: 'POST', body: { scheda: S.cache.formScheda, righe: [b] } });
-      S.ultimi = { data: b.data, bollettino: b.bollettino, conceria: b.conceria, team_leader: b.team_leader, sku: pfDa(b.componente), stato_elab: b.stato_elab, preparazione: b.preparazione };
+      S.ultimi = { data: b.data, bollettino: b.bollettino, conceria: b.conceria, team_leader: b.team_leader, sku: pfDa(b.componente), stagione: b.stagione, stato_elab: b.stato_elab, preparazione: b.preparazione };
       toast('Riga aggiunta', 'ok');
       if (altra) { // stessa testata e stesso articolo, componente da scegliere
         ['#e-pz', '#e-mot', '#e-op', '#e-note'].forEach(x => $(x).value = '');
@@ -1450,11 +1496,11 @@ async function esportaRighe() {
   try {
     let tutte = [], offset = 0, tot = 1;
     while (offset < tot) {
-      const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 1000, offset } });
+      const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, stagione: f.stagione || '', q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 1000, offset } });
       tutte = tutte.concat(r.righe); tot = r.totali.n; offset += r.righe.length; if (!r.righe.length) break;
     }
     const cols = [['stato_calc', 'Stato'], ['scheda', 'Scheda'], ['numero', 'N° richiesta'], ['stato_elab', 'Stato elaborazione'], ['preparazione', 'Preparazione'], ['data', 'Data'], ['bollettino', 'Bollettino'],
-      ['conceria', 'Conceria'], ['team_leader', 'Team leader'], ['componente', 'Componente'], ['sku', 'SKU'], ['descrizione', 'Descrizione'], ['codice_materiale', 'Codice materiale'],
+      ['conceria', 'Conceria'], ['team_leader', 'Team leader'], ['componente', 'Componente'], ['sku', 'SKU'], ['stagione', 'Stagione'], ['descrizione', 'Descrizione'], ['codice_materiale', 'Codice materiale'],
       ['pz_ko', 'Pz KO'], ['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['operatore', 'Operatore'], ['materiale', 'Materiale richiesto'], ['note', 'Note'],
       ['min_taglio', 'minuti TAGLIO'], ['min_prep', 'minuti PREPARAZIONE'], ['min_ting', 'minuti TINGITURA'], ['min_rma', 'minuti RMA'],
       ['molteplicita', 'Molteplicità'], ['n_pz', 'N° Pz'], ['totale_minuti', 'Totale minuti'], ['cns_area', 'CNS area'], ['prezzo', '€ materiale'], ['altri_materiali', 'Altri materiali'],
@@ -2245,9 +2291,9 @@ const TAB = {
   articoli: { t: 'Articoli', c: [['codice', 'SKU (Codice PF)'], ['descrizione', 'Descrizione SKU'], ['preparazione', 'Preparazione'], ['stagione', 'Stagione']] },
   componenti: { t: 'Componenti', c: [['codice_pf', 'Codice PF'], ['componente', 'Componente'], ['n_materiale', '#Materiale'], ['n_pz', 'N° pz', 'n'], ['cns_area', 'CNS area lorda', 'n'],
     ['sec_taglio', 'sec. Taglio', 'n'], ['sec_prep', 'sec. Preparazione', 'n'], ['sec_ting', 'sec. Tingitura', 'n'], ['sec_rma', 'sec. RMA', 'n'],
-    ['codice_materiale', 'Codice materiale', 'ro'], ['descr_materiale', 'Descr. materiale', 'ro'], ['um', 'UM', 'ro'], ['prezzo', '€', 'ro'], ['tm', 'TM', 'ro']] },
+    ['codice_materiale', 'Codice materiale', 'ro'], ['descr_materiale', 'Descr. materiale', 'ro'], ['um', 'UM', 'ro'], ['prezzo', '€', 'ro'], ['tm', 'TM', 'ro'], ['stagione', 'Stagione']] },
   distinta: { t: 'Distinta base (CC)', c: [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ['codice_materiale', 'Codice materiale'], ['descr_materiale', 'Descrizione materiale'],
-    ['um', 'UM'], ['tipologia', 'Tipologia Materiale'], ['prezzo_budget', '€ Prezzo', 'n'], ['note', 'Note']] },
+    ['um', 'UM'], ['tipologia', 'Tipologia Materiale'], ['prezzo_budget', '€ Prezzo', 'n'], ['note', 'Note'], ['stagione', 'Stagione']] },
   items_bc: { t: 'Items BC', c: [['item_brand', 'Brand'], ['codice', 'Codice'], ['descrizione', 'Descrizione'], ['prezzo', 'Prezzo', 'n'], ['um', 'UM'], ['tipo_categoria', 'Tipo categoria'],
     ['categoria', 'Categoria'], ['brand_categoria', 'Brand categoria'], ['collezione', 'Collezione']] },
 };
@@ -2377,6 +2423,7 @@ function apriImportDiba() {
       Ogni distinta ha in automatico anche la riga <b>Borse Complete</b> con il codice dell'articolo (UM PZ): è quella che dà prezzo e codice quando si chiede la borsa completa.</p>
     <div class="riga-flex"><label class="campo" style="min-width:340px;flex:0 1 420px">Articolo *<input id="db-art" list="dl-art-db" placeholder="Codice PF o descrizione…" autocomplete="off"></label>
       <label class="campo nascosto" id="db-descr-l" style="flex:0 1 340px">Descrizione articolo nuovo *<input id="db-descr" autocomplete="off"></label>
+      <label class="campo" style="flex:0 1 190px" title="La distinta di una stagione vale per i componenti di quella stagione; senza stagione vale per tutte">Stagione<select id="db-stag"></select></label>
       <label class="campo" style="flex:0 1 360px">File Excel<input type="file" id="db-file" accept=".xlsx,.xls,.csv"></label>
       <label class="campo nascosto" id="db-foglio-l" style="flex:0 1 260px">Foglio<select id="db-foglio"></select></label></div>
     <div id="db-map"></div></div>`;
@@ -2384,10 +2431,16 @@ function apriImportDiba() {
   const aggArt = () => { // articolo non in Database Articoli: serve la descrizione
     const cod = codiceDaArt($('#db-art').value);
     $('#db-descr-l').classList.toggle('nascosto', !cod || S.art.has(cod));
+    // stagioni dell'articolo (con più stagioni si propone la più recente; con una sola, «tutte» come prima)
+    const sts = (S.stagioniPf.get(cod) || []).filter(Boolean), cur = $('#db-stag').value;
+    $('#db-stag').innerHTML = `<option value="">Tutte le stagioni</option>` + [...new Set([...sts, ...(S.stagioniTutte || [])])].map(s => `<option value="${esc(s)}">${esc(s)}${sts.includes(s) ? '' : ' (altro)'}</option>`).join('');
+    $('#db-stag').value = cur && [...$('#db-stag').options].some(o => o.value === cur) ? cur : (sts.length > 1 ? sts[sts.length - 1] : '');
     if (S.diba && S.diba.intest) riepilogoDiba();
   };
   $('#db-art').addEventListener('input', aggArt);
   $('#db-descr').addEventListener('input', () => { if (S.diba && S.diba.intest) riepilogoDiba(); });
+  $('#db-stag').addEventListener('change', () => { if (S.diba && S.diba.intest) riepilogoDiba(); });
+  aggArt();
   const pre = codiceDaArt(S.filtri.dibaPf); // articolo già scelto sopra la tabella
   if (pre) { $('#db-art').value = S.art.has(pre) ? pre + ' — ' + (S.art.get(pre) || '') : pre; aggArt(); }
 }
@@ -2440,17 +2493,17 @@ function riepilogoDiba() {
   let senza = 0, presenti = 0, doppie = 0;
   const nuove = [];
   for (const r of d.dati) {
-    const o = { codice_pf: art.pf, articolo: art.articolo };
+    const o = { codice_pf: art.pf, articolo: art.articolo, stagione: $('#db-stag').value || null };
     for (const [k] of CAMPI_DIBA) if (m[k] >= 0) o[k] = NUM.includes(k) ? vNum(r[m[k]]) : vTxt(r[m[k]]);
     o.codice_materiale = (o.codice_materiale || '').toUpperCase();
     if (!o.codice_materiale) { senza++; continue; }
-    const key = o.codice_pf + '|' + o.codice_materiale;
+    const key = o.codice_pf + '|' + o.codice_materiale + '|' + String(o.stagione || '').toUpperCase();
     if (d.esistenti.has(key)) { presenti++; continue; }
     if (visti.has(key)) { doppie++; continue; }
     visti.add(key); nuove.push(o);
   }
   d.nuove = nuove;
-  const campi = [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ...CAMPI_DIBA.filter(([k]) => m[k] >= 0)];
+  const campi = [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ['stagione', 'Stagione'], ...CAMPI_DIBA.filter(([k]) => m[k] >= 0)];
   $('#db-riep').innerHTML = `<div class="db-conti">
       <div><b>${fmtN(d.dati.length)}</b><span>righe nel file</span></div>
       <div><b>${fmtN(presenti)}</b><span>già presenti per ${esc(art.pf)}</span></div>
@@ -2468,7 +2521,7 @@ async function eseguiImportDiba() {
   $('#db-vai').disabled = true;
   try {
     if (art && art.nuovo) { // l'articolo nuovo entra anche nel Database Articoli
-      await api('/api/admin/tabella/articoli', { method: 'POST', body: { codice: art.pf, descrizione: art.articolo } });
+      await api('/api/admin/tabella/articoli', { method: 'POST', body: { codice: art.pf, descrizione: art.articolo, stagione: $('#db-stag').value || null } });
       S.art.set(art.pf, art.articolo);
     }
     for (let i = 0; i < tot; i += 400) {
@@ -2524,7 +2577,7 @@ function ripristinaTuttiCe() {
   const w = $('#ce-elenco .tabwrap'); if (!w) return;
   w.scrollTop = r.top; w.scrollLeft = r.left; window.scrollTo(0, r.y);
   let tr = $(`#ce-elenco tr[data-id="${r.id}"]`);
-  if (!tr && r.comp) { const x = (S.ct.righe || []).find(c => c.codice_pf === r.pf && c.componente === r.comp); if (x) tr = $(`#ce-elenco tr[data-id="${x.id}"]`); } // dopo il salvataggio gli id cambiano
+  if (!tr && r.comp) { const x = (S.ct.righe || []).find(c => c.codice_pf === r.pf && (c.stagione || '') === (r.st || '') && c.componente === r.comp); if (x) tr = $(`#ce-elenco tr[data-id="${x.id}"]`); } // dopo il salvataggio gli id cambiano
   if (tr) tr.classList.add('evidenzia');
 }
 // «Annulla modifiche» su un articolo aperto da «Tutti i componenti»: torna alla tabella dov'eri e scarta le modifiche non salvate
@@ -2532,12 +2585,12 @@ function tornaATuttiCe() {
   const r = S.ctRitorno, pf = S.ce.pf;
   S.ce.modificato = false;
   modoCe('tutti', !r.salvato); // se nel frattempo hai salvato, la tabella si ricarica
-  apriArticoloDb(pf); // l'editor (nascosto) torna alla versione salvata
+  apriArticoloDb(pf, S.ce.nuovaSt ? S.ce.daStagione : S.ce.stagione); // l'editor (nascosto) torna alla versione salvata
 }
 function disegnaTuttiCe() {
   const t = S.ct, box = $('#ce-elenco'); if (!box || !t.righe) return;
   const q = t.q.trim().toLowerCase();
-  const tutte = t.righe.filter(c => !q || (c.codice_pf + ' ' + c.componente + ' ' + (S.art.get(c.codice_pf) || '') + ' ' + (c.n_materiale || '') + ' ' + (c.codice_materiale || '')).toLowerCase().includes(q));
+  const tutte = t.righe.filter(c => !q || (c.codice_pf + ' ' + (c.stagione || '') + ' ' + c.componente + ' ' + (S.art.get(c.codice_pf) || '') + ' ' + (c.n_materiale || '') + ' ' + (c.codice_materiale || '')).toLowerCase().includes(q));
   const lista = tutte.filter(c => t.vedi === 'tutti' || (t.vedi === 'manca' ? c.manca.length : !c.manca.length));
   const nManca = tutte.filter(c => c.manca.length).length;
   const pagina = lista; // tutte le righe in un'unica tabella da scorrere
@@ -2557,22 +2610,22 @@ function disegnaTuttiCe() {
     $('#ct-art').textContent = `${fmtN(new Set(lista.map(c => c.codice_pf)).size)} articoli`;
   }
   box.innerHTML = `
-    <div class="tabwrap tab-alta"><table class="foglio tab-tutti"><thead><tr><th>Articolo</th><th>Componente</th><th>Rinforzo di</th>${TC_COL.map(([k, l, tipo]) => `<th class="${tipo === 'e' ? 'n' : ''}${CALCOLATI.has(k) ? ' c-ro' : ''}"${CALCOLATI.has(k) ? ' title="Si aggiorna da solo: non si compila a mano"' : ''}>${l}</th>`).join('')}<th>Stato</th></tr></thead>
-      <tbody>${pagina.map((c, i) => `${i && c.codice_pf !== pagina[i - 1].codice_pf ? `<tr class="tt-sep"><td colspan="${TC_COL.length + 4}"></td></tr>` : ''}<tr class="clic ${c.padre ? 'tt-rinf' : c.princ ? 'tt-princ' : ''}" data-id="${c.id}" data-pf="${esc(c.codice_pf)}">
-        <td class="c-art"><b>${esc(c.codice_pf)}</b><div class="sub">${esc(S.art.get(c.codice_pf) || '')}</div></td>
+    <div class="tabwrap tab-alta"><table class="foglio tab-tutti"><thead><tr><th>Articolo</th><th>Stagione</th><th>Componente</th><th>Rinforzo di</th>${TC_COL.map(([k, l, tipo]) => `<th class="${tipo === 'e' ? 'n' : ''}${CALCOLATI.has(k) ? ' c-ro' : ''}"${CALCOLATI.has(k) ? ' title="Si aggiorna da solo: non si compila a mano"' : ''}>${l}</th>`).join('')}<th>Stato</th></tr></thead>
+      <tbody>${pagina.map((c, i) => `${i && (c.codice_pf !== pagina[i - 1].codice_pf || (c.stagione || '') !== (pagina[i - 1].stagione || '')) ? `<tr class="tt-sep"><td colspan="${TC_COL.length + 5}"></td></tr>` : ''}<tr class="clic ${c.padre ? 'tt-rinf' : c.princ ? 'tt-princ' : ''}" data-id="${c.id}" data-pf="${esc(c.codice_pf)}" data-st="${esc(c.stagione || '')}">
+        <td class="c-art"><b>${esc(c.codice_pf)}</b><div class="sub">${esc(S.art.get(c.codice_pf) || '')}</div></td><td class="c-st"><b>${esc(c.stagione || '')}</b></td>
         <td class="c-comp">${c.padre ? '<span class="freccia-rinf">↳</span>' : ''}${nome(c)}</td><td class="sub c-comp">${c.padre ? esc(String(c.padre).replace(c.codice_pf + '-', '')) : ''}</td>
         ${TC_COL.map(([k, , tipo]) => `<td class="${CALCOLATI.has(k) ? 'c-ro ' : ''}${tipo ? 'c-cifra ' : ''}${k === 'descr_materiale' ? 'c-descr ' : ''}${c.manca.includes(k) ? (DERIVATI[k] ? 'c-manca d' : 'c-manca') : ''}" ${k === 'descr_materiale' && c[k] ? `title="${esc(c[k])}"` : ''}${DERIVATI[k] && c.manca.includes(k) ? ` title="${DERIVATI[k]}"` : ''}>${val(c, k, tipo)}</td>`).join('')}
         <td>${c.manca.length ? `<span class="badge-manca" title="${c.manca.length} campi da completare">${c.manca.length} da compl.</span>` : '<span class="ok-txt">✓</span>'}</td></tr>`).join('')
-        || `<tr><td colspan="${TC_COL.length + 4}" class="vuoto">Nessun componente</td></tr>`}</tbody></table></div>
+        || `<tr><td colspan="${TC_COL.length + 5}" class="vuoto">Nessun componente</td></tr>`}</tbody></table></div>
     `;
-  $('#ce-elenco tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) apriDaTutti(tr.dataset.pf, Number(tr.dataset.id)); });
+  $('#ce-elenco tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) apriDaTutti(tr.dataset.pf, Number(tr.dataset.id), tr.dataset.st); });
 }
 // dalla tabella completa all'editor dell'articolo, col cursore sul primo campo da compilare del componente
-async function apriDaTutti(pf, id) {
+async function apriDaTutti(pf, id, st) {
   const c = (S.ct.righe || []).find(x => x.id === id), w = $('#ce-elenco .tabwrap');
-  S.ctRitorno = { pf, id, comp: c ? c.componente : null, top: w ? w.scrollTop : 0, left: w ? w.scrollLeft : 0, y: window.scrollY, salvato: false };
+  S.ctRitorno = { pf, st: st || '', id, comp: c ? c.componente : null, top: w ? w.scrollTop : 0, left: w ? w.scrollLeft : 0, y: window.scrollY, salvato: false };
   modoCe('articolo');
-  await apriArticoloDb(pf);
+  await apriArticoloDb(pf, st || '');
   if (!S.ce || S.ce.pf !== pf || !c) return;
   const r = S.ce.righe.find(x => x.id === id || String(x.componente) === String(c.componente));
   const tr = r && $(`.tab-ce tr[data-uid="${r.uid}"]`); if (!tr) return;
@@ -2623,19 +2676,51 @@ function fabDb(titolo, azione) {
   b.className = 'fab no-print'; b.id = 'db-fab'; b.textContent = '+'; b.title = titolo + ' · trascinalo per spostarlo'; b.setAttribute('aria-label', titolo);
   v.appendChild(b); rendiMobile(b, azione);
 }
-async function apriArticoloDb(pf) {
+// st non indicata: la stagione più recente dell'articolo
+async function apriArticoloDb(pf, st) {
   pf = pf || codiceDaArt($('#ce-pf').value);
   if (!pf) return toast('Scrivi il codice articolo', 'err');
-  if (S.ce && S.ce.modificato && S.ce.pf !== pf && !confirm(`Le modifiche a ${S.ce.pf} non sono salvate. Aprire comunque ${pf}?`)) return;
-  try { caricaCe(await api('/api/admin/componenti', { query: { pf } })); }
+  if (S.ce && S.ce.modificato && (S.ce.pf !== pf || (st !== undefined && st !== S.ce.stagione)) && !confirm(`Le modifiche a ${S.ce.pf} ${S.ce.stagione || ''} non sono salvate. Aprire comunque ${pf} ${st || ''}?`)) return;
+  try { caricaCe(await api('/api/admin/componenti', { query: st === undefined ? { pf } : { pf, stagione: st } })); }
   catch (e) { toast(e.message, 'err'); }
 }
-function caricaCe(d) {
+async function cambiaStagioneCe(st) {
+  const c = S.ce;
+  if (c.modificato && !confirm(`Le modifiche a ${c.pf} ${c.stagione || ''} non sono salvate. Passare alla stagione ${st || '—'} comunque?`)) { $('#ce-stag').value = c.stagione; return; }
+  c.modificato = false;
+  await apriArticoloDb(c.pf, st);
+}
+// Nuova stagione: si parte dai componenti della stagione aperta, da correggere solo dove cambia. Si crea quando si salva.
+function nuovaStagioneCe() {
+  const c = S.ce; if (!c) return;
+  const st = (prompt(`Nuova stagione per ${c.pf} (es. 27C).\nI componenti della stagione ${c.stagione || '—'} vengono copiati: correggi quello che cambia e premi «Salva articolo».`) || '').trim().toUpperCase();
+  if (!st) return;
+  if (c.stagioni.includes(st) && !c.nuovaSt) return toast(`${c.pf} ha già la stagione ${st}: sceglila dal menu Stagione`, 'err');
+  const da = c.nuovaSt ? c.daStagione : c.stagione;
+  c.righe.forEach(r => { r.id = null; r.mod = false; });
+  c.stagioni = [...c.stagioni.filter(s => !(c.nuovaSt && s === c.stagione)), st];
+  Object.assign(c, { stagione: st, daStagione: da, nuovaSt: true, modificato: true });
+  disegnaCe(); aggiornaStatoCe();
+}
+// stagione già in Articoli ma senza componenti: si copiano da un'altra stagione
+async function copiaStagioneCe(da) {
+  const c = S.ce; if (!c) return;
+  try {
+    const d = await api('/api/admin/componenti', { query: { pf: c.pf, stagione: da } });
+    const st = c.stagione, stagioni = c.stagioni;
+    caricaCe(d, { stagione: st, stagioni });
+    S.ce.righe.forEach(r => { r.id = null; r.mod = false; });
+    Object.assign(S.ce, { daStagione: da, copiata: true, modificato: true });
+    disegnaCe(); aggiornaStatoCe();
+  } catch (e) { toast(e.message, 'err'); }
+}
+function annullaCe() { const c = S.ce; c.modificato = false; apriArticoloDb(c.pf, c.nuovaSt ? c.daStagione : c.stagione); }
+function caricaCe(d, forza = {}) {
   const perChiave = new Map();
   const righe = d.componenti.map(c => { const r = { uid: ++ceUid, id: c.id, ...Object.fromEntries(CE_CAMPI.map(k => [k, c[k] ?? ''])), codice_materiale: c.codice_materiale, descr_materiale: c.descr_materiale,
     prezzo: c.prezzo, tm: c.tm, padre: c.padre, padreUid: null }; perChiave.set(c.chiave, r); return r; });
   righe.forEach(r => { if (r.padre && perChiave.has(r.padre) && !perChiave.get(r.padre).padre) r.padreUid = perChiave.get(r.padre).uid; });
-  S.ce = { pf: d.pf, descr: d.articolo ? d.articolo.descrizione : '', nuovo: !d.articolo, tipologie: d.tipologie, righe: ordinaCe(righe), modificato: false };
+  S.ce = { pf: d.pf, stagione: d.stagione || '', stagioni: d.stagioni || [], descr: d.articolo ? d.articolo.descrizione : '', nuovo: !d.articolo, tipologie: d.tipologie, righe: ordinaCe(righe), modificato: false, ...forza };
   if (S.ce.nuovo && !S.ce.righe.length) S.ce.righe.push(nuovaRigaCe());
   if ($('#ce-pf')) $('#ce-pf').value = d.pf;
   disegnaCe();
@@ -2656,9 +2741,15 @@ function disegnaCe() {
   const fuoco = trA ? { i: [...trA.parentNode.children].indexOf(trA), f: att.dataset.f } : null;
   const tip = [...new Set([...c.tipologie, ...TIPOLOGIE_BASE])];
   const nRinf = uid => c.righe.filter(r => r.padreUid === uid).length;
-  box.innerHTML = `<datalist id="dl-tipologie">${tip.map(t => `<option value="${esc(t)}">`).join('')}</datalist>
+  const altreSt = stagioniCon(c.pf).filter(s => s !== c.stagione);
+  box.innerHTML = `<datalist id="dl-stagioni">${(S.stagioniTutte || []).map(s => `<option value="${esc(s)}">`).join('')}</datalist><datalist id="dl-tipologie">${tip.map(t => `<option value="${esc(t)}">`).join('')}</datalist>
     <div class="riga-flex ce-testa">
       <h2>${esc(c.pf)}</h2>
+      <span class="riga-flex ce-stag" style="gap:6px"><span class="sub">Stagione</span>${c.nuovo
+        ? `<input id="ce-stag-n" list="dl-stagioni" value="${esc(c.stagione || '')}" placeholder="es. 27C" style="width:90px" autocomplete="off" title="Stagione del nuovo articolo (obbligatoria)">`
+        : `<select id="ce-stag" title="Stagione: i componenti sono per articolo e stagione">${c.stagioni.map(s => `<option value="${esc(s)}" ${s === c.stagione ? 'selected' : ''}>${esc(s || '— senza —')}${c.nuovaSt && s === c.stagione ? ' · nuova, da salvare' : ''}</option>`).join('')}</select>
+          <button class="btn" onclick="nuovaStagioneCe()" title="Crea una nuova stagione di questo articolo partendo dai componenti della stagione aperta">+ Nuova stagione</button>
+          ${!c.nuovaSt && !c.copiata && !c.righe.some(r => r.id) && altreSt.length ? `<button class="btn" onclick="copiaStagioneCe('${esc(altreSt[altreSt.length - 1])}')" title="Questa stagione non ha ancora componenti">Copia da ${esc(altreSt[altreSt.length - 1] || '—')}</button>` : ''}`}</span>
       <input id="ce-descr" value="${esc(c.descr)}" placeholder="Descrizione articolo${c.nuovo ? ' (obbligatoria per il nuovo articolo)' : ''}" style="max-width:420px">
       ${c.nuovo ? '<span class="badge b-da">articolo nuovo</span>' : ''}
       <span class="sub">${fmtN(c.righe.filter(r => !r.padreUid).length)} componenti · ${(n => n + (n === 1 ? ' rinforzo' : ' rinforzi'))(c.righe.filter(r => r.padreUid).length)}</span>
@@ -2683,9 +2774,11 @@ function disegnaCe() {
         <button class="icona" title="Elimina" onclick="togliCe(${r.uid})">✕</button></td></tr>`).join('')}</tbody></table></div>
     <div class="barra-salva" id="ce-barra"><span id="ce-stato" class="sub"></span><div class="spazio" style="flex:1"></div>
       ${S.ctRitorno && S.ctRitorno.pf === c.pf ? '<button class="btn" onclick="tornaATuttiCe()" title="Scarta le modifiche non salvate e torna a Tutti i componenti, dov\'eri">Annulla modifiche</button>'
-        : `<button class="btn" onclick="apriArticoloDb('${esc(c.pf)}')">Annulla modifiche</button>`}<button class="btn prim" id="ce-salva" onclick="salvaCe()">Salva articolo</button></div>`;
+        : `<button class="btn" onclick="annullaCe()">Annulla modifiche</button>`}<button class="btn prim" id="ce-salva" onclick="salvaCe()">Salva articolo</button></div>`;
   const tb = $('.tab-ce tbody');
   const segna = () => { c.modificato = true; aggiornaStatoCe(); };
+  if ($('#ce-stag')) $('#ce-stag').addEventListener('change', e => cambiaStagioneCe(e.target.value));
+  if ($('#ce-stag-n')) $('#ce-stag-n').addEventListener('input', e => { c.stagione = e.target.value.trim().toUpperCase(); segna(); });
   $('#ce-descr').addEventListener('input', e => { c.descr = e.target.value; segna(); });
   tb.addEventListener('input', e => {
     const f = e.target.dataset.f; if (!f || f === 'padre') return;
@@ -2769,7 +2862,8 @@ function rigaCe(el) { const uid = Number(el.closest('tr').dataset.uid); return S
 function aggiornaStatoCe() {
   const c = S.ce, el = $('#ce-stato'); if (!el) return;
   const nuove = c.righe.filter(r => !r.id).length, mod = c.righe.filter(r => r.id && r.mod).length;
-  el.innerHTML = c.modificato ? `<b style="color:var(--ambra)">Modifiche non salvate</b>${nuove ? ` · ${fmtN(nuove)} nuove` : ''}${mod ? ` · ${fmtN(mod)} modificate` : ''}` : 'Nessuna modifica';
+  const nota = c.nuovaSt ? ` · <b>nuova stagione ${esc(c.stagione)}</b>, componenti copiati da ${esc(c.daStagione || '—')}` : c.copiata ? ` · componenti copiati da ${esc(c.daStagione || '—')}` : '';
+  el.innerHTML = c.modificato ? `<b style="color:var(--ambra)">Modifiche non salvate</b>${nuove ? ` · ${fmtN(nuove)} nuove` : ''}${mod ? ` · ${fmtN(mod)} modificate` : ''}${nota}` : 'Nessuna modifica';
   $('#ce-salva').disabled = !c.modificato;
 }
 function aggiungiCe(base = {}, campo = 'componente') {
@@ -2833,15 +2927,17 @@ async function salvaCe() { // (la tabella "Tutti i componenti" si ricarica quand
     CE_NUM.forEach(k => { const v = String(r[k] ?? '').trim(); if (v && !Number.isFinite(Number(v.replace(',', '.')))) { err.push(`${n}: ${k.replace('sec_', 'sec. ')} non è un numero`); cella(k).classList.add('errato'); } });
   });
   if (c.nuovo && !c.descr) err.push('Scrivi la descrizione del nuovo articolo');
+  const st = c.nuovo ? String(($('#ce-stag-n') || {}).value || '').trim().toUpperCase() : c.stagione;
+  if (c.nuovo && !st) { err.push('Scrivi la stagione del nuovo articolo'); $('#ce-stag-n').classList.add('errato'); }
   if (err.length) return toast(err.slice(0, 6).join('\n'), 'err');
   const nomeDi = new Map(usate.map(r => [r.uid, String(r.componente).trim()]));
-  const body = { pf: c.pf, descrizione: c.descr, righe: usate.map(r => ({ componente: String(r.componente).trim(), n_materiale: String(r.n_materiale || '').trim(),
+  const body = { pf: c.pf, stagione: st, descrizione: c.descr, righe: usate.map(r => ({ componente: String(r.componente).trim(), n_materiale: String(r.n_materiale || '').trim(),
     ...Object.fromEntries(CE_NUM.map(k => [k, String(r[k] ?? '').trim().replace(',', '.')])), padre_nome: r.padreUid ? nomeDi.get(r.padreUid) || '' : '' })) };
   $('#ce-salva').disabled = true;
   try {
     const r = await api('/api/admin/componenti/salva', { method: 'POST', body });
     if (S.ctRitorno && S.ctRitorno.pf === c.pf) S.ctRitorno.salvato = true;
-    caricaCe(r); toast(`${c.pf} salvato: ${fmtN(r.componenti.length)} righe`, 'ok');
+    caricaCe(r); toast(`${c.pf}${st ? ' · stagione ' + st : ''} salvato: ${fmtN(r.componenti.length)} righe`, 'ok');
     caricaAnagrafiche();
   } catch (e) { toast(e.message, 'err'); $('#ce-salva').disabled = false; }
 }
@@ -3063,7 +3159,7 @@ async function analizzaImport() {
       T.componenti = compRighe.map(r => ({
         chiave: vTxt(g(r, 'M')) || (vTxt(g(r, 'N')) + ' - ' + vTxt(g(r, 'R'))), codice_pf: vTxt(g(r, 'N')), componente: vTxt(g(r, 'R')), n_materiale: vTxt(g(r, 'T')),
         n_pz: vNum(g(r, 'V')), cns_area: vNum(g(r, 'S')), sec_taglio: vNum(g(r, 'X')), sec_prep: vNum(g(r, 'Y')), sec_ting: vNum(g(r, 'Z')), sec_rma: vNum(g(r, 'AA')),
-        codice_materiale: vTxt(g(r, 'P')), descr_materiale: vTxt(g(r, 'Q')), prezzo: vNum(g(r, 'W')), tm: vTxt(g(r, 'AB')) }));
+        codice_materiale: vTxt(g(r, 'P')), descr_materiale: vTxt(g(r, 'Q')), prezzo: vNum(g(r, 'W')), tm: vTxt(g(r, 'AB')), stagione: vTxt(g(r, 'L')) }));
       // articoli: elenco SKU (H descrizione, I SKU, K preparazione) + i Codici PF dei componenti che non sono nell'elenco; stagione dalla colonna L
       const stag = new Map(); compRighe.forEach(r => { const pf = vTxt(g(r, 'N')), st = vTxt(g(r, 'L')); if (st && !stag.has(pf)) stag.set(pf, st); });
       const visti = new Set();
@@ -3095,7 +3191,8 @@ async function analizzaImport() {
             codice_materiale: vTxt(v('K')), pz_ko: vNum(v('L')), motivazione: vTxt(v('M')), responsabilita: vTxt(v('N')), operatore: vTxt(v('O')), materiale: vTxt(v('P')), note: vTxt(v('Q')),
             min_taglio: vNum(v('R')), min_prep: vNum(v('S')), min_ting: vNum(v('T')), min_rma: vNum(v('U')), molteplicita: vNum(v('W')), n_pz: vNum(v('X')), totale_minuti: vNum(v('AF')),
             cns_area: vNum(v('AD')), prezzo: vNum(v('AE')), tdp: null, altri_materiali: vNum(v('AI')), totale_eur: vNum(v('AJ')), tm: vTxt(v('AK')), macro_categoria: vTxt(v('AL')),
-            origine: 'import', riga_foglio: i + 1, creato_da: 'import', creato_il: new Date().toISOString() });
+            origine: 'import', riga_foglio: i + 1, creato_da: 'import', creato_il: new Date().toISOString(),
+            stagione: stag.get(vTxt(v('I'))) || stag.get(pfDa(vTxt(v('H')))) || null }); // stagione dell'articolo (colonna L del Database)
         });
       }
       T.righe.forEach(r => { if (r.numero) r.numero = r.numero.replace(/^(\d+)\.0+$/, '$1'); });
