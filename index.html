@@ -2474,8 +2474,33 @@ async function leggiFileDiba(file) {
     preparaFoglioDiba();
   } catch (e) { toast(e.message, 'err'); }
 }
+// Export Business Central «Esplosione quantità DB con Varianti»: una riga per materiale e per colore dell'articolo (colonna X).
+// Si prende solo il colore del codice articolo scelto; codice materiale = Nr. + "." + colore del materiale (come il foglio CC).
+const codColore = v => String(v ?? '').split(' - ')[0].trim().toUpperCase();
+function rigaBcDiba(d, r) {
+  const c = d.bc.col, mat = String(r[c.nr] ?? '').trim().toUpperCase(), col = codColore(r[c.colMat]);
+  return { codice_materiale: mat ? (col ? mat + '.' + col : mat) : '', descr_materiale: vTxt(r[c.descr]), um: vTxt(r[c.um]), consumo: vNum(r[c.qta]) };
+}
 function preparaFoglioDiba() {
   const d = S.diba, righe = XLSX.utils.sheet_to_json(d.wb.Sheets[d.foglio], { header: 1, raw: true, defval: null, blankrows: false });
+  const h0 = (righe[0] || []).map(v => String(v ?? '').trim()), ix = n => h0.indexOf(n);
+  d.bc = null;
+  if (ix('ItemColorText') >= 0 && ix('BomVariantCompNo') >= 0) { // file Business Central riconosciuto: niente scelta delle colonne
+    d.bc = { col: { item: ix('No_Item'), descrItem: ix('Desc_Item'), colore: ix('ItemColorText'), nr: ix('BomVariantCompNo'), descr: ix('BomVariantCompDesc'), colMat: ix('BomVariantCompColor'), um: ix('BomVariantCompUOMCode'), qta: ix('BomQuantityPer') } };
+    d.dati = righe.slice(1).filter(r => r && String(r[d.bc.col.nr] ?? '').trim());
+    const c = d.bc.col, it = d.dati.map(r => String(r[c.item] ?? '').trim().toUpperCase()).find(Boolean) || '';
+    d.bc.item = it; d.bc.descrItem = vTxt((d.dati[0] || [])[c.descrItem]);
+    d.bc.colori = [...new Map(d.dati.map(r => [codColore(r[c.colore]), String(r[c.colore] ?? '').trim()])).entries()].filter(x => x[0]);
+    d.intest = h0.map((nome, j) => ({ j, nome }));
+    d.map = { codice_materiale: c.nr, descr_materiale: c.descr, um: c.um, consumo: c.qta, tipologia: -1, prezzo_budget: -1, note: -1 };
+    const pf = codiceDaArt($('#db-art').value);
+    if (d.bc.colori.length === 1 && !pf.split('.')[2] && it) $('#db-art').value = it + '.' + d.bc.colori[0][0]; // un solo colore: articolo già pronto
+    $('#db-map').innerHTML = `<div class="avviso" style="margin-top:12px">File Business Central <b>Esplosione quantità DB con Varianti</b> di <b>${esc(it)}</b>: importo solo il colore del codice articolo scelto, senza doppioni.
+      Colori nel file: ${d.bc.colori.map(([k, t]) => `<button class="btn picc" onclick="sceltaColoreDiba('${esc(k)}')" title="Usa ${esc(it + '.' + k)}">${esc(t)}</button>`).join(' ')}</div><div id="db-riep"></div>`;
+    if (d.bc.descrItem && $('#db-descr') && !$('#db-descr').value) $('#db-descr').value = d.bc.descrItem;
+    $('#db-art').dispatchEvent(new Event('input'));
+    return riepilogoDiba();
+  }
   // riga di intestazione: la prima (tra le prime 15) con più nomi di colonna riconosciuti
   let iInt = 0, best = -1;
   righe.slice(0, 15).forEach((r, i) => { const n = (r || []).filter(v => CAMPI_DIBA.some(c => c[2].includes(normIntest(v)))).length; if (n > best) { best = n; iInt = i; } });
@@ -2494,16 +2519,25 @@ function disegnaMappaDiba() {
   $$('#db-map select[data-k]').forEach(el => el.addEventListener('change', () => { d.map[el.dataset.k] = Number(el.value); riepilogoDiba(); }));
   riepilogoDiba();
 }
+function sceltaColoreDiba(col) { $('#db-art').value = S.diba.bc.item + '.' + col; $('#db-art').dispatchEvent(new Event('input')); riepilogoDiba(); }
 function riepilogoDiba() {
   const d = S.diba, m = d.map, art = articoloDiba();
   if (!art) { $('#db-riep').innerHTML = `<p class="sub" style="color:var(--rosso)">${codiceDaArt($('#db-art').value) ? 'Articolo nuovo: scrivi la descrizione.' : 'Scegli l\'articolo (o scrivi il codice di un articolo nuovo).'}</p>`; return; }
   if (m.codice_materiale < 0) { $('#db-riep').innerHTML = '<p class="sub" style="color:var(--rosso)">Scegli almeno la colonna Codice materiale.</p>'; return; }
   const NUM = ['consumo', 'prezzo_budget'], visti = new Set(d.esistenti);
-  let senza = 0, presenti = 0, doppie = 0;
+  let senza = 0, presenti = 0, doppie = 0, sorgente = d.dati;
+  if (d.bc) { // solo le righe del colore del codice articolo scelto (es. AP5266.B28230.UF994 → UF994)
+    const parti = art.pf.split('.'), col = (parti[2] || '').toUpperCase(), base = parti.slice(0, 2).join('.');
+    if (!col || !d.bc.colori.some(x => x[0] === col) || (d.bc.item && base !== d.bc.item)) {
+      $('#db-riep').innerHTML = `<p class="sub" style="color:var(--rosso)">Scegli il codice articolo con il colore: ${d.bc.colori.map(x => esc(d.bc.item + '.' + x[0])).join(' oppure ')}</p>`; return;
+    }
+    sorgente = d.dati.filter(r => codColore(r[d.bc.col.colore]) === col);
+  }
   const nuove = [];
-  for (const r of d.dati) {
+  for (const r of sorgente) {
     const o = { codice_pf: art.pf, articolo: art.articolo, stagione: $('#db-stag').value || null };
-    for (const [k] of CAMPI_DIBA) if (m[k] >= 0) o[k] = NUM.includes(k) ? vNum(r[m[k]]) : vTxt(r[m[k]]);
+    if (d.bc) Object.assign(o, rigaBcDiba(d, r));
+    else for (const [k] of CAMPI_DIBA) if (m[k] >= 0) o[k] = NUM.includes(k) ? vNum(r[m[k]]) : vTxt(r[m[k]]);
     o.codice_materiale = (o.codice_materiale || '').toUpperCase();
     if (!o.codice_materiale) { senza++; continue; }
     const key = o.codice_pf + '|' + o.codice_materiale + '|' + String(o.stagione || '').toUpperCase();
@@ -2514,7 +2548,7 @@ function riepilogoDiba() {
   d.nuove = nuove;
   const campi = [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ['stagione', 'Collezione'], ...CAMPI_DIBA.filter(([k]) => m[k] >= 0)];
   $('#db-riep').innerHTML = `<div class="db-conti">
-      <div><b>${fmtN(d.dati.length)}</b><span>righe nel file</span></div>
+      <div><b>${fmtN(sorgente.length)}</b><span>${d.bc ? `righe del colore ${esc(art.pf.split('.')[2] || '')} (${fmtN(d.dati.length)} nel file)` : 'righe nel file'}</span></div>
       <div><b>${fmtN(presenti)}</b><span>già presenti per ${esc(art.pf)}</span></div>
       <div><b>${fmtN(doppie)}</b><span>doppie nel file</span></div>
       <div><b>${fmtN(senza)}</b><span>senza codice materiale</span></div>
