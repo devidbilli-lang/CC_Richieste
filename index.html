@@ -587,7 +587,7 @@ function prepAnagrafiche(a) {
   S.mot = new Map(a.motivazioni.map(m => [m[0], { resp: m[1], macro: m[2] }]));
   S.art = new Map(a.articoli.map(x => [x[0], x[1]]));
   S.artPrep = new Map(a.articoli.filter(x => x[2]).map(x => [x[0], x[2]])); // preparazione che lavora l'articolo (colonna K del Database)
-  // stagioni di ogni articolo, nell'ordine in cui sono state inserite in Articoli (l'ultima è la più recente)
+  // collezioni di ogni articolo, nell'ordine in cui sono state inserite in Articoli (l'ultima è la più recente)
   S.stagioniPf = new Map(); S.artSt = new Map();
   const addSt = (pf, st) => { if (!S.stagioniPf.has(pf)) S.stagioniPf.set(pf, []); const l = S.stagioniPf.get(pf); if (!l.includes(st)) l.push(st); };
   for (const x of a.articoli) { addSt(x[0], x[3] || ''); S.artSt.set(x[0] + '|' + (x[3] || ''), { descr: x[1], prep: x[2] }); }
@@ -610,7 +610,7 @@ function prepAnagrafiche(a) {
     lista.forEach(c => { c.nRinf = (figli.get(c.chiave) || []).length; });
     S.compSt.set(k, lista.filter(c => !c.padre).flatMap(c => [c, ...(figli.get(c.chiave) || [])]));
   }
-  // compPerPf: articoli che hanno componenti (quelli della stagione più recente)
+  // compPerPf: articoli che hanno componenti (quelli della collezione più recente)
   S.compPerPf = new Map(); for (const pf of S.stagioniPf.keys()) { const l = compsDi(pf); if (l.length) S.compPerPf.set(pf, l); }
   $('#dl-operatori').innerHTML = a.operatori.map(o => `<option value="${esc(o)}">`).join('');
   $('#dl-motivazioni').innerHTML = a.motivazioni.map(m => `<option value="${esc(m[0])}">${esc(m[1] || '')}</option>`).join('');
@@ -618,7 +618,7 @@ function prepAnagrafiche(a) {
   $('#dl-componenti').innerHTML = [...S.compSet].map(k => `<option value="${esc(k)}">`).join('');
 }
 async function caricaAnagrafiche() { prepAnagrafiche(await api('/api/anagrafiche')); }
-// stagioni dell'articolo che hanno componenti; quella proposta è la più recente
+// collezioni dell'articolo che hanno componenti; quella proposta è la più recente
 const stagioniCon = pf => (S.stagioniPf.get(pf) || []).filter(st => (S.compSt.get(pf + '|' + st) || []).length);
 const stagDef = pf => { const l = stagioniCon(pf); return l.length ? l[l.length - 1] : ''; };
 const compsDi = (pf, st) => S.compSt.get(pf + '|' + (st || stagDef(pf))) || [];
@@ -876,7 +876,7 @@ async function aggiornaContaElabora() {
 function opzioni(lista, sel, vuota = '—') { return `<option value="">${vuota}</option>` + lista.map(x => `<option ${x === sel ? 'selected' : ''}>${esc(x)}</option>`).join(''); }
 function codiceDaArt(v) { return String(v || '').split('—')[0].trim().toUpperCase(); }
 const COL_FOGLIO = [['numero', 'Codice Richiesta'], ['stato_elab', 'Stato Elaborazione'], ['preparazione', 'Preparazione'], ['data', 'Data'], ['bollettino', 'Bollettino'], ['conceria', 'Conceria'], ['team_leader', 'Team Leader'],
-  ['sku', 'SKU'], ['stagione', 'Stagione'], ['componente', 'Componente'], ['descrizione', 'Descrizione'], ['pz_ko', 'Pz KO'], ['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['operatore', 'Operatore'],
+  ['sku', 'SKU'], ['stagione', 'Collezione'], ['componente', 'Componente'], ['descrizione', 'Descrizione'], ['pz_ko', 'Pz KO'], ['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['operatore', 'Operatore'],
   ['materiale', 'Materiale Richiesto'], ['note', 'Note'], ['minuti', 'Minuti', 'n'], ['totale_eur', 'Totale €', 'n'], ['stato', 'Stato Richiesta']];
 // stesse formattazioni condizionali del foglio Google
 function classeCella(k, r) {
@@ -889,7 +889,7 @@ function classeCella(k, r) {
     case 'descrizione': c.push('c-desc'); break;
     case 'pz_ko': c.push('c-pz'); if (nr) c.push('nr'); else if (acc) c.push('acc'); break;
     case 'sku': c.push('c-centro', 'c-sku'); if (nr) c.push('nr'); break; // SKU in blu come la Descrizione
-    case 'stagione': c.push('c-centro', 'c-sku'); if (nr) c.push('nr'); break; // anche la stagione (collezione) in blu
+    case 'stagione': c.push('c-centro', 'c-sku'); if (nr) c.push('nr'); break; // anche la collezione (collezione) in blu
     case 'data': c.push('c-centro'); if (nr) c.push('nr'); else if (acc) c.push('acc'); break;
     case 'bollettino': case 'conceria': case 'preparazione': c.push('c-centro'); if (nr) c.push('nr'); break;
     case 'team_leader': c.push('c-tl'); if (nr) c.push('nr'); break;
@@ -937,7 +937,7 @@ function vistaFoglio() {
       <div class="pillole">${PERIODI.map(([k, t]) => `<button data-p="${k}" class="${!f.sett && f.periodo === k ? 'att' : ''}">${t}</button>`).join('')}</div>
       <select id="r-stato" class="filtro-sel" title="Stato">${[['', 'Tutti gli stati'], ['aperte', 'Aperte'], ['da_elaborare', 'Da elaborare'], ['in_corso', 'In corso'], ['chiusa', 'Chiuse'], ['non_richiedere', 'Non richiedere']]
         .map(([k, t]) => `<option value="${k}" ${f.stato === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      ${(S.stagioniTutte || []).length > 1 ? `<select id="r-stag" class="filtro-sel ${f.stagione ? 'att' : ''}" title="Stagione">${opzioni(S.stagioniTutte, f.stagione || '', 'Tutte le stagioni')}</select>` : ''}
+      ${(S.stagioniTutte || []).length > 1 ? `<select id="r-stag" class="filtro-sel ${f.stagione ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte, f.stagione || '', 'Tutte le collezioni')}</select>` : ''}
       <span class="sub" id="r-info"></span>
       <div class="spazio" style="flex:1"></div>
       <button class="icona" onclick="esportaRighe()" title="Esporta CSV">⤓ CSV</button>
@@ -1083,7 +1083,7 @@ function cellaNuovaBase(n, k) {
     case 'team_leader': return `<input data-f="team_leader" list="dl-operatori" value="${esc(n.team_leader)}" style="width:165px">`;
     case 'componente': return `<select data-f="componente" style="width:235px" ${comps.length ? '' : 'disabled'}>${opzioniComponenti(comps.length ? n.sku : '', n.componente, n.stagione)}</select>`;
     case 'stagione': { const l = stagioniCon(n.sku), cur = n.stagione || stagDef(n.sku);
-      return `<select data-f="stagione" style="width:84px" ${l.length ? '' : 'disabled'} title="Stagione dei componenti">${l.length ? l.map(s => `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s || '—')}</option>`).join('') : '<option value="">—</option>'}</select>`; }
+      return `<select data-f="stagione" style="width:84px" ${l.length ? '' : 'disabled'} title="Collezione dei componenti">${l.length ? l.map(s => `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s || '—')}</option>`).join('') : '<option value="">—</option>'}</select>`; }
     case 'sku': return `<input data-f="sku" list="dl-articoli" value="${esc(n.sku)}" placeholder="Articolo" autocomplete="off" style="width:200px">`;
     case 'descrizione': return esc(S.art.get(n.sku) || '');
     case 'pz_ko': return `<input data-f="pz_ko" type="number" min="1" step="1" inputmode="numeric" value="${esc(n.pz_ko)}" style="width:72px;text-align:center">`;
@@ -1116,7 +1116,7 @@ function replicaCampo(j, f) {
   let fatte = 0, saltate = 0;
   S.nuove.forEach((x, i) => {
     if (i === j) return;
-    if ((f === 'componente' || f === 'stagione') && x.sku !== src.sku) { saltate++; return; } // componente e stagione valgono solo per lo stesso articolo
+    if ((f === 'componente' || f === 'stagione') && x.sku !== src.sku) { saltate++; return; } // componente e collezione valgono solo per lo stesso articolo
     x[f] = src[f]; fatte++;
     if (f === 'sku') { if (!diPf(x.componente, src.sku)) x.componente = ''; x.stagione = src.stagione; }
     if (!compNuova(x)) x.componente = '';
@@ -1148,7 +1148,7 @@ function eventiNuove() {
     if (f === 'sku') {
       if (e.type === 'input' && !S.compPerPf.has(codiceDaArt(el.value))) { n.sku = codiceDaArt(el.value); salvaNuoveLocale(); return; }
       const cod = codiceDaArt(el.value); n.sku = cod; el.value = cod;
-      if (!stagioniCon(cod).includes(n.stagione)) n.stagione = stagDef(cod); // stagione più recente dell'articolo
+      if (!stagioniCon(cod).includes(n.stagione)) n.stagione = stagDef(cod); // collezione più recente dell'articolo
       if (!diPf(n.componente, cod) || !compNuova(n)) n.componente = '';
       if (!n.preparazione && prepDi(cod, n.stagione)) { n.preparazione = prepDi(cod, n.stagione); const tp = $('td[data-k="preparazione"]', tr); if (tp) tp.innerHTML = cellaNuova(n, 'preparazione'); }
       const ts = $('td[data-k="stagione"]', tr); if (ts) ts.innerHTML = cellaNuova(n, 'stagione');
@@ -1303,7 +1303,7 @@ function opzioniComponenti(pf, sel, st) {
   if (sel && !comps.some(c => c.chiave === sel)) html += `<option value="${esc(sel)}" selected>${esc(sel)} (non in anagrafica)</option>`;
   return html;
 }
-// stagioni con componenti dell'articolo (menu del modulo riga)
+// collezioni con componenti dell'articolo (menu del modulo riga)
 function opzioniStagione(pf, sel) {
   const l = stagioniCon(pf);
   if (!l.length) return '<option value="">—</option>';
@@ -1387,7 +1387,7 @@ function formRiga(r, pre) {
       <label class="campo">Conceria<select id="e-conc" ${dis}>${opzioni(S.ana.concerie, d.conceria)}</select></label>
       <label class="campo">Team leader<input id="e-tl" list="dl-operatori" value="${esc(d.team_leader || '')}" placeholder="Cerca…" ${ro}></label>
       <label class="campo largo">Codice articolo<input id="e-art" list="dl-articoli" value="${esc(pf ? pf + ' — ' + (S.art.get(pf) || '') : '')}" placeholder="Codice PF o descrizione…" autocomplete="off" ${ro}></label>
-      <label class="campo">Stagione<select id="e-stag" ${dis || (pf ? '' : 'disabled')}>${opzioniStagione(pf, stF)}</select></label>
+      <label class="campo">Collezione<select id="e-stag" ${dis || (pf ? '' : 'disabled')}>${opzioniStagione(pf, stF)}</select></label>
       <label class="campo largo">Componente<select id="e-comp" ${dis || (pf ? '' : 'disabled')}>${opzioniComponenti(pf, d.componente, stF)}</select></label>
       <label class="campo">Pz KO<input type="number" min="0" step="1" id="e-pz" value="${esc(d.pz_ko ?? '')}" ${ro}></label>
       <label class="campo largo">Motivazione<input id="e-mot" list="dl-motivazioni" value="${esc(d.motivazione || '')}" placeholder="Cerca motivazione…" ${ro}><span class="sub" id="e-motinfo" style="font-weight:500">${infoMot(d.motivazione)}</span></label>
@@ -1416,7 +1416,7 @@ function formRiga(r, pre) {
   const aggiornaComp = (soloStagione) => {
     const p = codiceDaArt(art.value);
     const cur = $('#e-comp').value;
-    if (soloStagione !== true) { // altro articolo: la stagione torna la più recente (o resta se l'articolo ce l'ha)
+    if (soloStagione !== true) { // altro articolo: la collezione torna la più recente (o resta se l'articolo ce l'ha)
       const st0 = $('#e-stag').value;
       $('#e-stag').innerHTML = opzioniStagione(p, stagioniCon(p).includes(st0) ? st0 : stagDef(p));
       $('#e-stag').disabled = !S.compPerPf.has(p);
@@ -1502,7 +1502,7 @@ async function esportaRighe() {
       tutte = tutte.concat(r.righe); tot = r.totali.n; offset += r.righe.length; if (!r.righe.length) break;
     }
     const cols = [['stato_calc', 'Stato'], ['scheda', 'Scheda'], ['numero', 'N° richiesta'], ['stato_elab', 'Stato elaborazione'], ['preparazione', 'Preparazione'], ['data', 'Data'], ['bollettino', 'Bollettino'],
-      ['conceria', 'Conceria'], ['team_leader', 'Team leader'], ['componente', 'Componente'], ['sku', 'SKU'], ['stagione', 'Stagione'], ['descrizione', 'Descrizione'], ['codice_materiale', 'Codice materiale'],
+      ['conceria', 'Conceria'], ['team_leader', 'Team leader'], ['componente', 'Componente'], ['sku', 'SKU'], ['stagione', 'Collezione'], ['descrizione', 'Descrizione'], ['codice_materiale', 'Codice materiale'],
       ['pz_ko', 'Pz KO'], ['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['operatore', 'Operatore'], ['materiale', 'Materiale richiesto'], ['note', 'Note'],
       ['min_taglio', 'minuti TAGLIO'], ['min_prep', 'minuti PREPARAZIONE'], ['min_ting', 'minuti TINGITURA'], ['min_rma', 'minuti RMA'],
       ['molteplicita', 'Molteplicità'], ['n_pz', 'N° Pz'], ['totale_minuti', 'Totale minuti'], ['cns_area', 'CNS area'], ['prezzo', '€ materiale'], ['altri_materiali', 'Altri materiali'],
@@ -2290,12 +2290,12 @@ const TAB = {
   materiali: { t: 'Materiali richiesti', c: [['nome', 'Nome']] },
   preparazioni: { t: 'Preparazioni', c: [['nome', 'Nome']] },
   motivazioni: { t: 'Motivazioni', c: [['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['macro_categoria', 'Macro categoria']] },
-  articoli: { t: 'Articoli', c: [['codice', 'SKU (Codice PF)'], ['descrizione', 'Descrizione SKU'], ['preparazione', 'Preparazione'], ['stagione', 'Stagione']] },
+  articoli: { t: 'Articoli', c: [['codice', 'SKU (Codice PF)'], ['descrizione', 'Descrizione SKU'], ['preparazione', 'Preparazione'], ['stagione', 'Collezione']] },
   componenti: { t: 'Componenti', c: [['codice_pf', 'Codice PF'], ['componente', 'Componente'], ['n_materiale', '#Materiale'], ['n_pz', 'N° pz', 'n'], ['cns_area', 'CNS area lorda', 'n'],
     ['sec_taglio', 'sec. Taglio', 'n'], ['sec_prep', 'sec. Preparazione', 'n'], ['sec_ting', 'sec. Tingitura', 'n'], ['sec_rma', 'sec. RMA', 'n'],
-    ['codice_materiale', 'Codice materiale', 'ro'], ['descr_materiale', 'Descr. materiale', 'ro'], ['um', 'UM', 'ro'], ['prezzo', '€', 'ro'], ['tm', 'TM', 'ro'], ['stagione', 'Stagione']] },
+    ['codice_materiale', 'Codice materiale', 'ro'], ['descr_materiale', 'Descr. materiale', 'ro'], ['um', 'UM', 'ro'], ['prezzo', '€', 'ro'], ['tm', 'TM', 'ro'], ['stagione', 'Collezione']] },
   distinta: { t: 'Distinta base (CC)', c: [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ['codice_materiale', 'Codice materiale'], ['descr_materiale', 'Descrizione materiale'],
-    ['um', 'UM'], ['tipologia', 'Tipologia Materiale'], ['prezzo_budget', '€ Prezzo', 'n'], ['note', 'Note'], ['stagione', 'Stagione']] },
+    ['um', 'UM'], ['tipologia', 'Tipologia Materiale'], ['prezzo_budget', '€ Prezzo', 'n'], ['note', 'Note'], ['stagione', 'Collezione']] },
   items_bc: { t: 'Items BC', c: [['item_brand', 'Brand'], ['codice', 'Codice'], ['descrizione', 'Descrizione'], ['prezzo', 'Prezzo', 'n'], ['um', 'UM'], ['tipo_categoria', 'Tipo categoria'],
     ['categoria', 'Categoria'], ['brand_categoria', 'Brand categoria'], ['collezione', 'Collezione']] },
 };
@@ -2425,7 +2425,7 @@ function apriImportDiba() {
       Ogni distinta ha in automatico anche la riga <b>Borse Complete</b> con il codice dell'articolo (UM PZ): è quella che dà prezzo e codice quando si chiede la borsa completa.</p>
     <div class="riga-flex"><label class="campo" style="min-width:340px;flex:0 1 420px">Articolo *<input id="db-art" list="dl-art-db" placeholder="Codice PF o descrizione…" autocomplete="off"></label>
       <label class="campo nascosto" id="db-descr-l" style="flex:0 1 340px">Descrizione articolo nuovo *<input id="db-descr" autocomplete="off"></label>
-      <label class="campo" style="flex:0 1 190px" title="La distinta di una stagione vale per i componenti di quella stagione; senza stagione vale per tutte">Stagione<select id="db-stag"></select></label>
+      <label class="campo" style="flex:0 1 190px" title="La distinta di una collezione vale per i componenti di quella collezione; senza collezione vale per tutte">Collezione<select id="db-stag"></select></label>
       <label class="campo" style="flex:0 1 360px">File Excel<input type="file" id="db-file" accept=".xlsx,.xls,.csv"></label>
       <label class="campo nascosto" id="db-foglio-l" style="flex:0 1 260px">Foglio<select id="db-foglio"></select></label></div>
     <div id="db-map"></div></div>`;
@@ -2433,9 +2433,9 @@ function apriImportDiba() {
   const aggArt = () => { // articolo non in Database Articoli: serve la descrizione
     const cod = codiceDaArt($('#db-art').value);
     $('#db-descr-l').classList.toggle('nascosto', !cod || S.art.has(cod));
-    // stagioni dell'articolo (con più stagioni si propone la più recente; con una sola, «tutte» come prima)
+    // collezioni dell'articolo (con più collezioni si propone la più recente; con una sola, «tutte» come prima)
     const sts = (S.stagioniPf.get(cod) || []).filter(Boolean), cur = $('#db-stag').value;
-    $('#db-stag').innerHTML = `<option value="">Tutte le stagioni</option>` + [...new Set([...sts, ...(S.stagioniTutte || [])])].map(s => `<option value="${esc(s)}">${esc(s)}${sts.includes(s) ? '' : ' (altro)'}</option>`).join('');
+    $('#db-stag').innerHTML = `<option value="">Tutte le collezioni</option>` + [...new Set([...sts, ...(S.stagioniTutte || [])])].map(s => `<option value="${esc(s)}">${esc(s)}${sts.includes(s) ? '' : ' (altro)'}</option>`).join('');
     $('#db-stag').value = cur && [...$('#db-stag').options].some(o => o.value === cur) ? cur : (sts.length > 1 ? sts[sts.length - 1] : '');
     if (S.diba && S.diba.intest) riepilogoDiba();
   };
@@ -2505,7 +2505,7 @@ function riepilogoDiba() {
     visti.add(key); nuove.push(o);
   }
   d.nuove = nuove;
-  const campi = [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ['stagione', 'Stagione'], ...CAMPI_DIBA.filter(([k]) => m[k] >= 0)];
+  const campi = [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ['stagione', 'Collezione'], ...CAMPI_DIBA.filter(([k]) => m[k] >= 0)];
   $('#db-riep').innerHTML = `<div class="db-conti">
       <div><b>${fmtN(d.dati.length)}</b><span>righe nel file</span></div>
       <div><b>${fmtN(presenti)}</b><span>già presenti per ${esc(art.pf)}</span></div>
@@ -2612,7 +2612,7 @@ function disegnaTuttiCe() {
     $('#ct-art').textContent = `${fmtN(new Set(lista.map(c => c.codice_pf)).size)} articoli`;
   }
   box.innerHTML = `
-    <div class="tabwrap tab-alta"><table class="foglio tab-tutti"><thead><tr><th>Articolo</th><th>Stagione</th><th>Componente</th><th>Rinforzo di</th>${TC_COL.map(([k, l, tipo]) => `<th class="${tipo === 'e' ? 'n' : ''}${CALCOLATI.has(k) ? ' c-ro' : ''}"${CALCOLATI.has(k) ? ' title="Si aggiorna da solo: non si compila a mano"' : ''}>${l}</th>`).join('')}<th>Stato</th></tr></thead>
+    <div class="tabwrap tab-alta"><table class="foglio tab-tutti"><thead><tr><th>Articolo</th><th>Collezione</th><th>Componente</th><th>Rinforzo di</th>${TC_COL.map(([k, l, tipo]) => `<th class="${tipo === 'e' ? 'n' : ''}${CALCOLATI.has(k) ? ' c-ro' : ''}"${CALCOLATI.has(k) ? ' title="Si aggiorna da solo: non si compila a mano"' : ''}>${l}</th>`).join('')}<th>Stato</th></tr></thead>
       <tbody>${pagina.map((c, i) => `${i && (c.codice_pf !== pagina[i - 1].codice_pf || (c.stagione || '') !== (pagina[i - 1].stagione || '')) ? `<tr class="tt-sep"><td colspan="${TC_COL.length + 5}"></td></tr>` : ''}<tr class="clic ${c.padre ? 'tt-rinf' : c.princ ? 'tt-princ' : ''}" data-id="${c.id}" data-pf="${esc(c.codice_pf)}" data-st="${esc(c.stagione || '')}">
         <td class="c-art"><b>${esc(c.codice_pf)}</b><div class="sub">${esc(S.art.get(c.codice_pf) || '')}</div></td><td class="c-st"><b>${esc(c.stagione || '')}</b></td>
         <td class="c-comp">${c.padre ? '<span class="freccia-rinf">↳</span>' : ''}${nome(c)}</td><td class="sub c-comp">${c.padre ? esc(String(c.padre).replace(c.codice_pf + '-', '')) : ''}</td>
@@ -2678,7 +2678,7 @@ function fabDb(titolo, azione) {
   b.className = 'fab no-print'; b.id = 'db-fab'; b.textContent = '+'; b.title = titolo + ' · trascinalo per spostarlo'; b.setAttribute('aria-label', titolo);
   v.appendChild(b); rendiMobile(b, azione);
 }
-// st non indicata: la stagione più recente dell'articolo
+// st non indicata: la collezione più recente dell'articolo
 async function apriArticoloDb(pf, st) {
   pf = pf || codiceDaArt($('#ce-pf').value);
   if (!pf) return toast('Scrivi il codice articolo', 'err');
@@ -2688,23 +2688,23 @@ async function apriArticoloDb(pf, st) {
 }
 async function cambiaStagioneCe(st) {
   const c = S.ce;
-  if (c.modificato && !confirm(`Le modifiche a ${c.pf} ${c.stagione || ''} non sono salvate. Passare alla stagione ${st || '—'} comunque?`)) { $('#ce-stag').value = c.stagione; return; }
+  if (c.modificato && !confirm(`Le modifiche a ${c.pf} ${c.stagione || ''} non sono salvate. Passare alla collezione ${st || '—'} comunque?`)) { $('#ce-stag').value = c.stagione; return; }
   c.modificato = false;
   await apriArticoloDb(c.pf, st);
 }
-// Nuova stagione: si parte dai componenti della stagione aperta, da correggere solo dove cambia. Si crea quando si salva.
+// Nuova stagione: si parte dai componenti della collezione aperta, da correggere solo dove cambia. Si crea quando si salva.
 function nuovaStagioneCe() {
   const c = S.ce; if (!c) return;
-  const st = (prompt(`Nuova stagione per ${c.pf} (es. 27C).\nI componenti della stagione ${c.stagione || '—'} vengono copiati: correggi quello che cambia e premi «Salva articolo».`) || '').trim().toUpperCase();
+  const st = (prompt(`Nuova collezione per ${c.pf} (es. 27C).\nI componenti della collezione ${c.stagione || '—'} vengono copiati: correggi quello che cambia e premi «Salva articolo».`) || '').trim().toUpperCase();
   if (!st) return;
-  if (c.stagioni.includes(st) && !c.nuovaSt) return toast(`${c.pf} ha già la stagione ${st}: sceglila dal menu Stagione`, 'err');
+  if (c.stagioni.includes(st) && !c.nuovaSt) return toast(`${c.pf} ha già la collezione ${st}: sceglila dal menu Collezione`, 'err');
   const da = c.nuovaSt ? c.daStagione : c.stagione;
   c.righe.forEach(r => { r.id = null; r.mod = false; });
   c.stagioni = [...c.stagioni.filter(s => !(c.nuovaSt && s === c.stagione)), st];
   Object.assign(c, { stagione: st, daStagione: da, nuovaSt: true, modificato: true });
   disegnaCe(); aggiornaStatoCe();
 }
-// stagione già in Articoli ma senza componenti: si copiano da un'altra stagione
+// collezione già in Articoli ma senza componenti: si copiano da un'altra collezione
 async function copiaStagioneCe(da) {
   const c = S.ce; if (!c) return;
   try {
@@ -2747,11 +2747,11 @@ function disegnaCe() {
   box.innerHTML = `<datalist id="dl-stagioni">${(S.stagioniTutte || []).map(s => `<option value="${esc(s)}">`).join('')}</datalist><datalist id="dl-tipologie">${tip.map(t => `<option value="${esc(t)}">`).join('')}</datalist>
     <div class="riga-flex ce-testa">
       <h2>${esc(c.pf)}</h2>
-      <span class="riga-flex ce-stag" style="gap:6px"><span class="sub">Stagione</span>${c.nuovo
-        ? `<input id="ce-stag-n" list="dl-stagioni" value="${esc(c.stagione || '')}" placeholder="es. 27C" style="width:90px" autocomplete="off" title="Stagione del nuovo articolo (obbligatoria)">`
-        : `<select id="ce-stag" title="Stagione: i componenti sono per articolo e stagione">${c.stagioni.map(s => `<option value="${esc(s)}" ${s === c.stagione ? 'selected' : ''}>${esc(s || '— senza —')}${c.nuovaSt && s === c.stagione ? ' · nuova, da salvare' : ''}</option>`).join('')}</select>
-          <button class="btn" onclick="nuovaStagioneCe()" title="Crea una nuova stagione di questo articolo partendo dai componenti della stagione aperta">+ Nuova stagione</button>
-          ${!c.nuovaSt && !c.copiata && !c.righe.some(r => r.id) && altreSt.length ? `<button class="btn" onclick="copiaStagioneCe('${esc(altreSt[altreSt.length - 1])}')" title="Questa stagione non ha ancora componenti">Copia da ${esc(altreSt[altreSt.length - 1] || '—')}</button>` : ''}`}</span>
+      <span class="riga-flex ce-stag" style="gap:6px"><span class="sub">Collezione</span>${c.nuovo
+        ? `<input id="ce-stag-n" list="dl-stagioni" value="${esc(c.stagione || '')}" placeholder="es. 27C" style="width:90px" autocomplete="off" title="Collezione del nuovo articolo (obbligatoria)">`
+        : `<select id="ce-stag" title="Collezione: i componenti sono per articolo e collezione">${c.stagioni.map(s => `<option value="${esc(s)}" ${s === c.stagione ? 'selected' : ''}>${esc(s || '— senza —')}${c.nuovaSt && s === c.stagione ? ' · nuova, da salvare' : ''}</option>`).join('')}</select>
+          <button class="btn" onclick="nuovaStagioneCe()" title="Crea una nuova collezione di questo articolo partendo dai componenti della collezione aperta">+ Nuova collezione</button>
+          ${!c.nuovaSt && !c.copiata && !c.righe.some(r => r.id) && altreSt.length ? `<button class="btn" onclick="copiaStagioneCe('${esc(altreSt[altreSt.length - 1])}')" title="Questa collezione non ha ancora componenti">Copia da ${esc(altreSt[altreSt.length - 1] || '—')}</button>` : ''}`}</span>
       <input id="ce-descr" value="${esc(c.descr)}" placeholder="Descrizione articolo${c.nuovo ? ' (obbligatoria per il nuovo articolo)' : ''}" style="max-width:420px">
       ${c.nuovo ? '<span class="badge b-da">articolo nuovo</span>' : ''}
       <span class="sub">${fmtN(c.righe.filter(r => !r.padreUid).length)} componenti · ${(n => n + (n === 1 ? ' rinforzo' : ' rinforzi'))(c.righe.filter(r => r.padreUid).length)}</span>
@@ -2864,7 +2864,7 @@ function rigaCe(el) { const uid = Number(el.closest('tr').dataset.uid); return S
 function aggiornaStatoCe() {
   const c = S.ce, el = $('#ce-stato'); if (!el) return;
   const nuove = c.righe.filter(r => !r.id).length, mod = c.righe.filter(r => r.id && r.mod).length;
-  const nota = c.nuovaSt ? ` · <b>nuova stagione ${esc(c.stagione)}</b>, componenti copiati da ${esc(c.daStagione || '—')}` : c.copiata ? ` · componenti copiati da ${esc(c.daStagione || '—')}` : '';
+  const nota = c.nuovaSt ? ` · <b>nuova collezione ${esc(c.stagione)}</b>, componenti copiati da ${esc(c.daStagione || '—')}` : c.copiata ? ` · componenti copiati da ${esc(c.daStagione || '—')}` : '';
   el.innerHTML = c.modificato ? `<b style="color:var(--ambra)">Modifiche non salvate</b>${nuove ? ` · ${fmtN(nuove)} nuove` : ''}${mod ? ` · ${fmtN(mod)} modificate` : ''}${nota}` : 'Nessuna modifica';
   $('#ce-salva').disabled = !c.modificato;
 }
@@ -2930,7 +2930,7 @@ async function salvaCe() { // (la tabella "Tutti i componenti" si ricarica quand
   });
   if (c.nuovo && !c.descr) err.push('Scrivi la descrizione del nuovo articolo');
   const st = c.nuovo ? String(($('#ce-stag-n') || {}).value || '').trim().toUpperCase() : c.stagione;
-  if (c.nuovo && !st) { err.push('Scrivi la stagione del nuovo articolo'); $('#ce-stag-n').classList.add('errato'); }
+  if (c.nuovo && !st) { err.push('Scrivi la collezione del nuovo articolo'); $('#ce-stag-n').classList.add('errato'); }
   if (err.length) return toast(err.slice(0, 6).join('\n'), 'err');
   const nomeDi = new Map(usate.map(r => [r.uid, String(r.componente).trim()]));
   const body = { pf: c.pf, stagione: st, descrizione: c.descr, righe: usate.map(r => ({ componente: String(r.componente).trim(), n_materiale: String(r.n_materiale || '').trim(),
@@ -2939,7 +2939,7 @@ async function salvaCe() { // (la tabella "Tutti i componenti" si ricarica quand
   try {
     const r = await api('/api/admin/componenti/salva', { method: 'POST', body });
     if (S.ctRitorno && S.ctRitorno.pf === c.pf) S.ctRitorno.salvato = true;
-    caricaCe(r); toast(`${c.pf}${st ? ' · stagione ' + st : ''} salvato: ${fmtN(r.componenti.length)} righe`, 'ok');
+    caricaCe(r); toast(`${c.pf}${st ? ' · collezione ' + st : ''} salvato: ${fmtN(r.componenti.length)} righe`, 'ok');
     caricaAnagrafiche();
   } catch (e) { toast(e.message, 'err'); $('#ce-salva').disabled = false; }
 }
@@ -3135,8 +3135,8 @@ const vData = v => {
 };
 const vBool = v => v === true || v === 1 || String(v).toUpperCase() === 'TRUE' || String(v).toUpperCase() === 'VERO' ? 1 : 0;
 const col = L => { let n = 0; for (const ch of L) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
-// Nel foglio, quando un articolo tornava in un'altra stagione, il codice aveva la stagione attaccata
-// («AS4416.B20787.94305 (26S)», «AS5293.B24704.94305 27P»): nell'app resta il codice normale e la stagione va a parte.
+// Nel foglio, quando un articolo tornava in un'altra collezione, il codice aveva la collezione attaccata
+// («AS4416.B20787.94305 (26S)», «AS5293.B24704.94305 27P»): nell'app resta il codice normale e la collezione va a parte.
 const RE_COD_ST = /^(A[A-Z]\d{4}\.[A-Z0-9]+\.[A-Z0-9]+)\s*\(?\s*(\d{2}[A-Z])\s*\)?$/i;
 function separaStagione(cod) { const s = String(cod || '').trim(), m = s.match(RE_COD_ST); return m ? { codice: m[1].toUpperCase(), stagione: m[2].toUpperCase() } : { codice: s || null, stagione: null }; }
 function chiaveSenzaStagione(chiave) { // «Codice PF (26S) - Componente» → «Codice PF - Componente»
@@ -3174,8 +3174,8 @@ async function analizzaImport() {
           n_pz: vNum(g(r, 'V')), cns_area: vNum(g(r, 'S')), sec_taglio: vNum(g(r, 'X')), sec_prep: vNum(g(r, 'Y')), sec_ting: vNum(g(r, 'Z')), sec_rma: vNum(g(r, 'AA')),
           codice_materiale: vTxt(g(r, 'P')), descr_materiale: vTxt(g(r, 'Q')), prezzo: vNum(g(r, 'W')), tm: vTxt(g(r, 'AB')), stagione: pf.stagione || vTxt(g(r, 'L')) };
       });
-      // articoli: elenco SKU (H descrizione, I SKU, K preparazione) + i Codici PF dei componenti che non sono nell'elenco; stagione dalla colonna L
-      // stagione di ogni codice (senza stagione attaccata) dalla colonna L
+      // articoli: elenco SKU (H descrizione, I SKU, K preparazione) + i Codici PF dei componenti che non sono nell'elenco; collezione dalla colonna L
+      // collezione di ogni codice (senza collezione attaccata) dalla colonna L
       const stag = new Map(); compRighe.forEach(r => { const pf = separaStagione(vTxt(g(r, 'N'))), st = vTxt(g(r, 'L')); if (st && !pf.stagione && !stag.has(pf.codice)) stag.set(pf.codice, st); });
       const stDi = c => { const p = separaStagione(c); return { codice: p.codice, stagione: p.stagione || stag.get(p.codice) || null }; };
       const visti = new Set();
@@ -3183,12 +3183,12 @@ async function analizzaImport() {
       d.filter(r => vTxt(g(r, 'I'))).forEach(r => { const a = stDi(vTxt(g(r, 'I'))), k = a.codice + '|' + (a.stagione || ''); if (visti.has(k)) return; visti.add(k);
         T.articoli.push({ codice: a.codice, descrizione: vTxt(g(r, 'H')), preparazione: vTxt(g(r, 'K')), stagione: a.stagione }); });
       unici(compRighe.map(r => vTxt(g(r, 'N')))).forEach(c => { const a = stDi(c), k = a.codice + '|' + (a.stagione || ''); if (visti.has(k)) return; visti.add(k);
-        const altro = T.articoli.find(x => x.codice === a.codice); // stessa descrizione e preparazione delle altre stagioni
+        const altro = T.articoli.find(x => x.codice === a.codice); // stessa descrizione e preparazione delle altre collezioni
         T.articoli.push({ codice: a.codice, descrizione: altro ? altro.descrizione : null, preparazione: altro ? altro.preparazione : null, stagione: a.stagione }); });
       const prep = [...d.map(r => vTxt(g(r, 'K')))];
       const cc = righeFoglio(wb, 'CC');
       // anche le righe senza Codice PF ma con codice materiale (es. la borsa completa AS4416.B20787 col suo € Prezzo)
-      // la distinta di un codice con la stagione attaccata diventa la distinta di quella stagione
+      // la distinta di un codice con la collezione attaccata diventa la distinta di quella collezione
       if (cc) T.distinta = cc.slice(1).filter(r => vTxt(r[col('A')]) || vTxt(r[col('C')])).map(r => { const pf = separaStagione(vTxt(r[col('A')]));
         return { codice_pf: pf.codice, articolo: vTxt(r[col('B')]), codice_materiale: vTxt(r[col('C')]),
           descr_materiale: vTxt(r[col('F')]), um: vTxt(r[col('G')]), consumo: null, tipologia: vTxt(r[col('H')]), prezzo_budget: vNum(r[col('I')]), note: vTxt(r[col('J')]), stagione: pf.stagione }; });
@@ -3212,7 +3212,7 @@ async function analizzaImport() {
             min_taglio: vNum(v('R')), min_prep: vNum(v('S')), min_ting: vNum(v('T')), min_rma: vNum(v('U')), molteplicita: vNum(v('W')), n_pz: vNum(v('X')), totale_minuti: vNum(v('AF')),
             cns_area: vNum(v('AD')), prezzo: vNum(v('AE')), tdp: null, altri_materiali: vNum(v('AI')), totale_eur: vNum(v('AJ')), tm: vTxt(v('AK')), macro_categoria: vTxt(v('AL')),
             origine: 'import', riga_foglio: i + 1, creato_da: 'import', creato_il: new Date().toISOString(),
-            stagione: sk.stagione || ch.stagione || stag.get(sk.codice) || stag.get(ch.codice) || null }); // stagione attaccata al codice, altrimenti quella dell'articolo (colonna L)
+            stagione: sk.stagione || ch.stagione || stag.get(sk.codice) || stag.get(ch.codice) || null }); // collezione attaccata al codice, altrimenti quella dell'articolo (colonna L)
         });
       }
       T.righe.forEach(r => { if (r.numero) r.numero = r.numero.replace(/^(\d+)\.0+$/, '$1'); });
