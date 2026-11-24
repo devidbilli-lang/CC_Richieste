@@ -2299,7 +2299,7 @@ const TAB = {
     ['sec_taglio', 'sec. Taglio', 'n'], ['sec_prep', 'sec. Preparazione', 'n'], ['sec_ting', 'sec. Tingitura', 'n'], ['sec_rma', 'sec. RMA', 'n'],
     ['codice_materiale', 'Codice materiale', 'ro'], ['descr_materiale', 'Descr. materiale', 'ro'], ['um', 'UM', 'ro'], ['prezzo', '€', 'ro'], ['tm', 'TM', 'ro'], ['stagione', 'Collezione']] },
   distinta: { t: 'Distinta base (CC)', c: [['codice_pf', 'Codice PF'], ['articolo', 'Articolo'], ['codice_materiale', 'Codice materiale'], ['descr_materiale', 'Descrizione materiale'],
-    ['um', 'UM'], ['tipologia', 'Tipologia Materiale'], ['prezzo_budget', '€ Prezzo', 'n'], ['note', 'Note'], ['stagione', 'Collezione']] },
+    ['um', 'UM'], ['tipologia', 'Tipologia Materiale'], ['note', 'Note'], ['stagione', 'Collezione']] },
   items_bc: { t: 'Items BC', c: [['item_brand', 'Brand'], ['codice', 'Codice'], ['descrizione', 'Descrizione'], ['prezzo', 'Prezzo', 'n'], ['um', 'UM'], ['tipo_categoria', 'Tipo categoria'],
     ['categoria', 'Categoria'], ['brand_categoria', 'Brand categoria'], ['collezione', 'Collezione']] },
 };
@@ -2421,7 +2421,7 @@ async function aggiornaPbi() {
 const CAMPI_DIBA = [['codice_materiale', 'Codice materiale', ['codice materiale', 'cod materiale', 'codice componente', 'materiale']],
   ['descr_materiale', 'Descrizione materiale', ['descrizione materiale', 'descr materiale', 'descrizione componente']], ['um', 'UM', ['um', 'u m', 'unita di misura', 'unità di misura']],
   ['consumo', 'Consumo', ['consumo', 'quantita', 'quantità', 'qta', 'qty']], ['tipologia', 'Tipologia', ['tipologia materiale', 'tipologia']],
-  ['prezzo_budget', '€ budget', ['prezzo budget', '€ prezzo budget', '€ budget', 'prezzo']], ['note', 'Note', ['note']]];
+  ['note', 'Note', ['note']]];
 const normIntest = v => String(v ?? '').toLowerCase().replace(/[€.\-_/]/g, ' ').replace(/\s+/g, ' ').trim();
 function apriImportDiba() {
   S.diba = null;
@@ -2492,7 +2492,7 @@ function preparaFoglioDiba() {
     d.bc.item = it; d.bc.descrItem = vTxt((d.dati[0] || [])[c.descrItem]);
     d.bc.colori = [...new Map(d.dati.map(r => [codColore(r[c.colore]), String(r[c.colore] ?? '').trim()])).entries()].filter(x => x[0]);
     d.intest = h0.map((nome, j) => ({ j, nome }));
-    d.map = { codice_materiale: c.nr, descr_materiale: c.descr, um: c.um, consumo: c.qta, tipologia: -1, prezzo_budget: -1, note: -1 };
+    d.map = { codice_materiale: c.nr, descr_materiale: c.descr, um: c.um, consumo: c.qta, tipologia: -1, note: -1 };
     const pf = codiceDaArt($('#db-art').value);
     if (d.bc.colori.length === 1 && !pf.split('.')[2] && it) $('#db-art').value = it + '.' + d.bc.colori[0][0]; // un solo colore: articolo già pronto
     $('#db-map').innerHTML = `<div class="avviso" style="margin-top:12px">File Business Central <b>Esplosione quantità DB con Varianti</b> di <b>${esc(it)}</b>: importo solo il colore del codice articolo scelto, senza doppioni.
@@ -2586,7 +2586,7 @@ const TC_COL = [['n_materiale', '#Materiale'], ['n_pz', 'N° pz', 'n'], ['cns_ar
   ['sec_ting', 'sec. Ting.', 'n'], ['sec_rma', 'sec. RMA', 'n'], ['codice_materiale', 'Cod. materiale'], ['descr_materiale', 'Descr. materiale'], ['prezzo', '€', 'e'], ['tm', 'TM']];
 // colonne che l'app ricava da sola (Distinta base, Items BC, TDP): grigie, non si compilano a mano
 const CALCOLATI = new Set(['codice_materiale', 'descr_materiale', 'prezzo', 'tdp', 'um', 'tm']);
-const DERIVATI = { codice_materiale: 'manca in Distinta base per la tipologia', prezzo: 'manca il € Prezzo nella Distinta base' };
+const DERIVATI = { codice_materiale: 'manca in Distinta base per la tipologia', prezzo: 'manca il prezzo in Items BC' };
 const vuoto = v => v === null || v === undefined || String(v).trim() === '';
 function mancantiCe(c) {
   const acc = /ACCESSORIO/i.test(c.n_materiale || '') || c.tm === 'Accessorio', m = [];
@@ -2699,7 +2699,7 @@ function vistaComponentiDb() {
   $('#an-extra').innerHTML = `<span class="riga-flex" id="ce-art" style="gap:6px">
       <input id="ce-pf" list="dl-articoli-tutti" placeholder="Articolo: Codice PF (es. M14019)…" autocomplete="off" value="${esc(S.ce ? S.ce.pf : '')}" style="width:250px">
       <button class="btn prim" onclick="apriArticoloDb()">Apri</button>
-      <span class="info-db" id="ce-aiuto" title="Per un articolo nuovo scrivi il codice e premi Apri. I componenti si scrivono direttamente nella tabella: Invio passa alla riga sotto (e ne crea una nuova in fondo), e puoi incollare più righe copiate da Excel. Codice materiale, €, UM e TM si aggiornano da soli quando cambia la Distinta base (foglio CC): codice e descrizione con i primi 19 caratteri del Codice PF e la tipologia, € dal € Prezzo; per «Borse Complete» il codice è il Codice PF senza il colore.">i</span></span>
+      <span class="info-db" id="ce-aiuto" title="Per un articolo nuovo scrivi il codice e premi Apri. I componenti si scrivono direttamente nella tabella: Invio passa alla riga sotto (e ne crea una nuova in fondo), e puoi incollare più righe copiate da Excel. Codice materiale, €, UM e TM si aggiornano da soli quando cambia la Distinta base o Items BC: codice e descrizione con i primi 19 caratteri del Codice PF e la tipologia, € da Items BC; per «Borse Complete» il codice è il Codice PF senza il colore.">i</span></span>
     <span class="riga-flex nascosto" id="ct-barra" style="gap:6px"></span>
     <div class="pillole" id="ce-modo"><button data-m="articolo">Per articolo</button><button data-m="tutti">Tutti i componenti</button></div>`;
   $('#an-corpo').innerHTML = `<div id="ce-out"></div><div id="ce-elenco" class="nascosto"></div>`;
@@ -3012,7 +3012,7 @@ async function caricaAna(offset = 0, opz = {}) {
     $('#an-info').textContent = `${fmtN(r.totale)} record${r.totale > 200 ? ` · ${offset + 1}-${offset + r.righe.length}` : ''}`;
     S.filtri.anaTot = r.totale; S.filtri.anaOff = offset;
     $('#an-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th class="c-sel"><input type="checkbox" id="an-tutti" title="Seleziona tutte le righe della pagina"></th>${cfg.c.map(c => `<th class="ord ${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' ? 'c-ro' : ''}" onclick="ordinaAna('${c[0]}')" title="${c[2] === 'ro' ? 'Calcolata: non si modifica · ' : ''}Ordina">${c[1]}${S.filtri.anaOrd === c[0] ? `<span class="freccia">${S.filtri.anaDir === 'desc' ? '▼' : '▲'}</span>` : '<span class="freccia spenta">▲▼</span>'}</th>`).join('')}<th></th></tr></thead>
-      <tbody>${r.righe.map((x, i) => `<tr data-id="${x.id}" class="${S.selAna.has(x.id) ? 'sel' : ''}"><td class="c-sel"><input type="checkbox" data-sel="${x.id}" ${S.selAna.has(x.id) ? 'checked' : ''}></td>${cfg.c.map(c => `<td class="${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' ? 'c-ro' : ''}">${c[2] === 'n' ? fmtN(x[c[0]]) : esc(x[c[0]] ?? '')}${copiabile(t, c) ? `<button type="button" class="replica" data-rep="${c[0]}" data-i="${i}" title="Copia questo valore sulle righe spuntate">⇊</button>` : ''}</td>`).join('')}
+      <tbody>${r.righe.map((x, i) => `<tr data-id="${x.id}" class="${S.selAna.has(x.id) ? 'sel' : ''}"><td class="c-sel"><input type="checkbox" data-sel="${x.id}" ${S.selAna.has(x.id) ? 'checked' : ''}></td>${cfg.c.map(c => `<td class="${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' || daItems(x, c) ? 'c-ro' : ''}"${daItems(x, c) ? ' title="Da Items BC"' : ''}>${c[2] === 'n' ? fmtN(x[c[0]]) : esc(x[c[0]] ?? '')}${copiabile(t, c) && !daItems(x, c) ? `<button type="button" class="replica" data-rep="${c[0]}" data-i="${i}" title="Copia questo valore sulle righe spuntate">⇊</button>` : ''}</td>`).join('')}
         <td><button class="icona" onclick="editAna(${i})">✎</button></td></tr>`).join('')}</tbody></table></div>
       <div class="riga-flex" style="justify-content:center;margin:10px">${offset > 0 ? `<button class="btn" onclick="caricaAna(${Math.max(0, offset - 200)})">← Precedenti</button>` : ''}
         ${offset + r.righe.length < r.totale ? `<button class="btn" onclick="caricaAna(${offset + 200})">Successivi →</button>` : ''}</div>`;
@@ -3040,6 +3040,7 @@ async function caricaAna(offset = 0, opz = {}) {
 }
 // ⇊ su una cella: il suo valore va sulle righe spuntate (stesso campo)
 const NON_COPIABILI = { articoli: ['codice', 'stagione'], distinta: ['codice_pf'], componenti: ['chiave', 'codice_pf', 'componente', 'padre', 'stagione'] };
+const daItems = (x, c) => c[0] === 'prezzo_budget' && !!x.prezzo_da_items; // € della Distinta preso da Items BC: non si modifica qui
 const copiabile = (t, c) => c[2] !== 'ro' && !(NON_COPIABILI[t] || []).includes(c[0]);
 async function copiaCellaAna(t, riga, campo) {
   const ids = [...S.selAna].filter(id => id !== riga.id);
@@ -3087,14 +3088,14 @@ async function eliminaSelAna() {
 function editAna(i) {
   const t = S.filtri.anaTab || 'componenti', cfg = TAB[t];
   const x = i === null ? {} : S.cache.ana[i];
-  modale(`${i === null ? 'Nuovo' : 'Modifica'} · ${cfg.t}`, `<div class="griglia">${cfg.c.map(c => `<label class="campo">${c[1]}<input id="an-${c[0]}" value="${esc(x[c[0]] ?? '')}" ${c[2] === 'ro' ? 'readonly' : ''}></label>`).join('')}</div>
-    ${t === 'componenti' ? '<p class="sub">Codice materiale, €, UM e TM si ricavano dalla Distinta base (foglio CC) quando salvi.</p>' : ''}`,
+  modale(`${i === null ? 'Nuovo' : 'Modifica'} · ${cfg.t}`, `<div class="griglia">${cfg.c.map(c => `<label class="campo">${c[1]}<input id="an-${c[0]}" value="${esc(x[c[0]] ?? '')}" ${c[2] === 'ro' || daItems(x, c) ? 'readonly' : ''}${daItems(x, c) ? ' title="Da Items BC: si cambia in Items BC"' : ''}></label>`).join('')}</div>
+    ${t === 'componenti' ? '<p class="sub">Codice materiale, UM e TM si ricavano dalla Distinta base, il € da Items BC, quando salvi.</p>' : ''}`,
     `${i !== null ? `<button class="btn peric" onclick="delAna(${x.id})">Elimina</button>` : ''}<div class="spazio" style="flex:1"></div>
      <button class="btn" onclick="chiudiModale()">Annulla</button><button class="btn prim" onclick="salvaAna(${i === null ? 'null' : x.id})">Salva</button>`);
 }
 async function salvaAna(id) {
   const t = S.filtri.anaTab || 'componenti', cfg = TAB[t];
-  const body = {}; cfg.c.filter(c => c[2] !== 'ro').forEach(c => body[c[0]] = $('#an-' + c[0]).value);
+  const body = {}; cfg.c.filter(c => c[2] !== 'ro' && !$('#an-' + c[0]).readOnly).forEach(c => body[c[0]] = $('#an-' + c[0]).value);
   try {
     const r = await api('/api/admin/tabella/' + t + (id ? '/' + id : ''), { method: id ? 'PUT' : 'POST', body });
     chiudiModale(); toast('Salvato', 'ok');
@@ -3375,7 +3376,7 @@ async function eseguiImport() {
       }
       scrivi(`  ✓ ${k} completata`);
     }
-    if (sel.some(k => ['componenti', 'distinta'].includes(k))) {
+    if (sel.some(k => ['componenti', 'distinta', 'items_bc'].includes(k))) {
       scrivi('Aggiorno materiali ed € dei componenti…'); await api('/api/admin/ricava-componenti', { method: 'POST', body: {} }); scrivi('  ✓ componenti aggiornati');
     }
     $('#im-bar').style.width = '100%';
