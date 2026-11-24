@@ -1075,14 +1075,14 @@ function cellaNuovaBase(n, k) {
     case 'stato_elab': return isMag() ? `<select data-f="stato_elab">${['Si', 'Non Richiedere'].map(x => `<option ${n.stato_elab === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`
       : `<span title="Gestito dal magazzino">${esc(n.stato_elab || 'Si')}</span>`;
     case 'preparazione': return `<select data-f="preparazione" style="width:150px">${opzioni(S.ana.preparazioni || [], n.preparazione)}</select>`;
-    case 'data': return `<input type="date" data-f="data" value="${esc(n.data)}" max="${giorniFa(-7)}" style="width:142px">`;
+    case 'data': return `<input type="date" data-f="data" value="${esc(n.data)}" max="${giorniFa(-7)}" style="width:118px;padding:6px 3px">`;
     case 'bollettino': return `<input data-f="bollettino" value="${esc(n.bollettino)}" style="width:96px">`;
     case 'conceria': return `<select data-f="conceria" style="width:112px">${opzioni(S.ana.concerie, n.conceria)}</select>`;
     case 'team_leader': return `<input data-f="team_leader" list="dl-operatori" value="${esc(n.team_leader)}" style="width:165px">`;
     case 'componente': return `<select data-f="componente" style="width:235px" ${comps.length ? '' : 'disabled'}>${opzioniComponenti(comps.length ? n.sku : '', n.componente, n.stagione)}</select>`;
     case 'stagione': { const l = stagioniCon(n.sku), cur = n.stagione || stagDef(n.sku);
       return `<select data-f="stagione" style="width:84px" ${l.length ? '' : 'disabled'} title="Stagione dei componenti">${l.length ? l.map(s => `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s || '—')}</option>`).join('') : '<option value="">—</option>'}</select>`; }
-    case 'sku': return `<input data-f="sku" list="dl-articoli" value="${esc(n.sku)}" placeholder="Articolo" autocomplete="off" style="width:112px">`;
+    case 'sku': return `<input data-f="sku" list="dl-articoli" value="${esc(n.sku)}" placeholder="Articolo" autocomplete="off" style="width:200px">`;
     case 'descrizione': return esc(S.art.get(n.sku) || '');
     case 'pz_ko': return `<input data-f="pz_ko" type="number" min="1" step="1" inputmode="numeric" value="${esc(n.pz_ko)}" style="width:72px;text-align:center">`;
     case 'motivazione': return `<input data-f="motivazione" list="dl-motivazioni" value="${esc(n.motivazione)}" placeholder="Motivazione" style="width:245px">`;
