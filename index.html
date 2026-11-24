@@ -3133,6 +3133,16 @@ const vData = v => {
 };
 const vBool = v => v === true || v === 1 || String(v).toUpperCase() === 'TRUE' || String(v).toUpperCase() === 'VERO' ? 1 : 0;
 const col = L => { let n = 0; for (const ch of L) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+// Nel foglio, quando un articolo tornava in un'altra stagione, il codice aveva la stagione attaccata
+// («AS4416.B20787.94305 (26S)», «AS5293.B24704.94305 27P»): nell'app resta il codice normale e la stagione va a parte.
+const RE_COD_ST = /^(A[A-Z]\d{4}\.[A-Z0-9]+\.[A-Z0-9]+)\s*\(?\s*(\d{2}[A-Z])\s*\)?$/i;
+function separaStagione(cod) { const s = String(cod || '').trim(), m = s.match(RE_COD_ST); return m ? { codice: m[1].toUpperCase(), stagione: m[2].toUpperCase() } : { codice: s || null, stagione: null }; }
+function chiaveSenzaStagione(chiave) { // «Codice PF (26S) - Componente» → «Codice PF - Componente»
+  const s = String(chiave || '').trim(), i = s.indexOf(' - ');
+  if (!s) return { chiave: null, codice: null, stagione: null };
+  const p = separaStagione(i < 0 ? s : s.slice(0, i));
+  return { chiave: i < 0 ? p.codice : p.codice + s.slice(i), codice: p.codice, stagione: p.stagione };
+}
 function righeFoglio(wb, nome) { const ws = wb.Sheets[nome]; if (!ws) return null; return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true }); }
 function unici(arr) { const s = new Set(), out = []; for (const x of arr) { if (x && !s.has(x)) { s.add(x); out.push(x); } } return out; }
 
@@ -3156,22 +3166,30 @@ async function analizzaImport() {
       T.motivazioni = d.filter(r => vTxt(g(r, 'E'))).map(r => ({ motivazione: vTxt(g(r, 'E')), responsabilita: vTxt(g(r, 'F')), macro_categoria: vTxt(g(r, 'D')) }));
       // componenti: chiave = colonna M «Unione Componente» (Codice PF - Componente)
       const compRighe = d.filter(r => vTxt(g(r, 'N')) && vTxt(g(r, 'R')));
-      T.componenti = compRighe.map(r => ({
-        chiave: vTxt(g(r, 'M')) || (vTxt(g(r, 'N')) + ' - ' + vTxt(g(r, 'R'))), codice_pf: vTxt(g(r, 'N')), componente: vTxt(g(r, 'R')), n_materiale: vTxt(g(r, 'T')),
-        n_pz: vNum(g(r, 'V')), cns_area: vNum(g(r, 'S')), sec_taglio: vNum(g(r, 'X')), sec_prep: vNum(g(r, 'Y')), sec_ting: vNum(g(r, 'Z')), sec_rma: vNum(g(r, 'AA')),
-        codice_materiale: vTxt(g(r, 'P')), descr_materiale: vTxt(g(r, 'Q')), prezzo: vNum(g(r, 'W')), tm: vTxt(g(r, 'AB')), stagione: vTxt(g(r, 'L')) }));
+      T.componenti = compRighe.map(r => {
+        const pf = separaStagione(vTxt(g(r, 'N'))), nome = vTxt(g(r, 'R'));
+        return { chiave: vTxt(g(r, 'M')) ? chiaveSenzaStagione(vTxt(g(r, 'M'))).chiave : pf.codice + ' - ' + nome, codice_pf: pf.codice, componente: nome, n_materiale: vTxt(g(r, 'T')),
+          n_pz: vNum(g(r, 'V')), cns_area: vNum(g(r, 'S')), sec_taglio: vNum(g(r, 'X')), sec_prep: vNum(g(r, 'Y')), sec_ting: vNum(g(r, 'Z')), sec_rma: vNum(g(r, 'AA')),
+          codice_materiale: vTxt(g(r, 'P')), descr_materiale: vTxt(g(r, 'Q')), prezzo: vNum(g(r, 'W')), tm: vTxt(g(r, 'AB')), stagione: pf.stagione || vTxt(g(r, 'L')) };
+      });
       // articoli: elenco SKU (H descrizione, I SKU, K preparazione) + i Codici PF dei componenti che non sono nell'elenco; stagione dalla colonna L
-      const stag = new Map(); compRighe.forEach(r => { const pf = vTxt(g(r, 'N')), st = vTxt(g(r, 'L')); if (st && !stag.has(pf)) stag.set(pf, st); });
+      // stagione di ogni codice (senza stagione attaccata) dalla colonna L
+      const stag = new Map(); compRighe.forEach(r => { const pf = separaStagione(vTxt(g(r, 'N'))), st = vTxt(g(r, 'L')); if (st && !pf.stagione && !stag.has(pf.codice)) stag.set(pf.codice, st); });
+      const stDi = c => { const p = separaStagione(c); return { codice: p.codice, stagione: p.stagione || stag.get(p.codice) || null }; };
       const visti = new Set();
       T.articoli = [];
-      d.filter(r => vTxt(g(r, 'I'))).forEach(r => { const c = vTxt(g(r, 'I')); if (visti.has(c)) return; visti.add(c);
-        T.articoli.push({ codice: c, descrizione: vTxt(g(r, 'H')), preparazione: vTxt(g(r, 'K')), stagione: stag.get(c) || null }); });
-      unici(compRighe.map(r => vTxt(g(r, 'N')))).forEach(c => { if (!visti.has(c)) { visti.add(c); T.articoli.push({ codice: c, descrizione: null, preparazione: null, stagione: stag.get(c) || null }); } });
+      d.filter(r => vTxt(g(r, 'I'))).forEach(r => { const a = stDi(vTxt(g(r, 'I'))), k = a.codice + '|' + (a.stagione || ''); if (visti.has(k)) return; visti.add(k);
+        T.articoli.push({ codice: a.codice, descrizione: vTxt(g(r, 'H')), preparazione: vTxt(g(r, 'K')), stagione: a.stagione }); });
+      unici(compRighe.map(r => vTxt(g(r, 'N')))).forEach(c => { const a = stDi(c), k = a.codice + '|' + (a.stagione || ''); if (visti.has(k)) return; visti.add(k);
+        const altro = T.articoli.find(x => x.codice === a.codice); // stessa descrizione e preparazione delle altre stagioni
+        T.articoli.push({ codice: a.codice, descrizione: altro ? altro.descrizione : null, preparazione: altro ? altro.preparazione : null, stagione: a.stagione }); });
       const prep = [...d.map(r => vTxt(g(r, 'K')))];
       const cc = righeFoglio(wb, 'CC');
       // anche le righe senza Codice PF ma con codice materiale (es. la borsa completa AS4416.B20787 col suo € Prezzo)
-      if (cc) T.distinta = cc.slice(1).filter(r => vTxt(r[col('A')]) || vTxt(r[col('C')])).map(r => ({ codice_pf: vTxt(r[col('A')]), articolo: vTxt(r[col('B')]), codice_materiale: vTxt(r[col('C')]),
-          descr_materiale: vTxt(r[col('F')]), um: vTxt(r[col('G')]), consumo: null, tipologia: vTxt(r[col('H')]), prezzo_budget: vNum(r[col('I')]), note: vTxt(r[col('J')]) }));
+      // la distinta di un codice con la stagione attaccata diventa la distinta di quella stagione
+      if (cc) T.distinta = cc.slice(1).filter(r => vTxt(r[col('A')]) || vTxt(r[col('C')])).map(r => { const pf = separaStagione(vTxt(r[col('A')]));
+        return { codice_pf: pf.codice, articolo: vTxt(r[col('B')]), codice_materiale: vTxt(r[col('C')]),
+          descr_materiale: vTxt(r[col('F')]), um: vTxt(r[col('G')]), consumo: null, tipologia: vTxt(r[col('H')]), prezzo_budget: vNum(r[col('I')]), note: vTxt(r[col('J')]), stagione: pf.stagione }; });
       else avvisi.push('Foglio "CC" non trovato: distinta base non importata');
       const it = righeFoglio(wb, 'items BC');
       if (it) T.items_bc = it.slice(1).filter(r => vTxt(r[col('B')])).map(r => ({ item_brand: vTxt(r[col('A')]), codice: vTxt(r[col('B')]), descrizione: vTxt(r[col('C')]),
@@ -3185,14 +3203,14 @@ async function analizzaImport() {
         rows.forEach((r, i) => {
           if (i < 2 || !vTxt(r[col('H')])) return;
           const v = L => r[col(L)];
-          const conc = vTxt(v('F'));
+          const conc = vTxt(v('F')), ch = chiaveSenzaStagione(vTxt(v('H'))), sk = separaStagione(vTxt(v('I')));
           T.righe.push({ scheda: nome, numero: vTxt(v('A')), stato_elab: vTxt(v('B')), preparazione: vTxt(v('C')), data: vData(v('D')), bollettino: vTxt(v('E')),
-            conceria: conc ? (concMap.get(conc.toLowerCase()) || conc) : null, team_leader: vTxt(v('G')), componente: vTxt(v('H')), sku: vTxt(v('I')), descrizione: vTxt(v('J')),
+            conceria: conc ? (concMap.get(conc.toLowerCase()) || conc) : null, team_leader: vTxt(v('G')), componente: ch.chiave, sku: sk.codice, descrizione: vTxt(v('J')),
             codice_materiale: vTxt(v('K')), pz_ko: vNum(v('L')), motivazione: vTxt(v('M')), responsabilita: vTxt(v('N')), operatore: vTxt(v('O')), materiale: vTxt(v('P')), note: vTxt(v('Q')),
             min_taglio: vNum(v('R')), min_prep: vNum(v('S')), min_ting: vNum(v('T')), min_rma: vNum(v('U')), molteplicita: vNum(v('W')), n_pz: vNum(v('X')), totale_minuti: vNum(v('AF')),
             cns_area: vNum(v('AD')), prezzo: vNum(v('AE')), tdp: null, altri_materiali: vNum(v('AI')), totale_eur: vNum(v('AJ')), tm: vTxt(v('AK')), macro_categoria: vTxt(v('AL')),
             origine: 'import', riga_foglio: i + 1, creato_da: 'import', creato_il: new Date().toISOString(),
-            stagione: stag.get(vTxt(v('I'))) || stag.get(pfDa(vTxt(v('H')))) || null }); // stagione dell'articolo (colonna L del Database)
+            stagione: sk.stagione || ch.stagione || stag.get(sk.codice) || stag.get(ch.codice) || null }); // stagione attaccata al codice, altrimenti quella dell'articolo (colonna L)
         });
       }
       T.righe.forEach(r => { if (r.numero) r.numero = r.numero.replace(/^(\d+)\.0+$/, '$1'); });
@@ -3239,7 +3257,7 @@ const vMin = v => { if (v === null || v === undefined || v === '') return null; 
 function mappaAvanzamento(rows) {
   const ora = new Date().toISOString();
   return rows.slice(1).filter(r => vTxt(r[0]) && !/^n°/i.test(vTxt(r[0]))).map(r => ({
-    numero: vTxt(r[col('A')]).replace(/^(\d+)\.0+$/, '$1'), tipo: null, codice_articolo: vTxt(r[col('B')]), descrizione: null, data_elab: null, richiedente: vTxt(r[col('C')]),
+    numero: vTxt(r[col('A')]).replace(/^(\d+)\.0+$/, '$1'), tipo: null, codice_articolo: separaStagione(vTxt(r[col('B')])).codice, descrizione: null, data_elab: null, richiedente: vTxt(r[col('C')]),
     min_taglio: vMin(r[col('D')]), min_prep: vMin(r[col('E')]), min_ting: vMin(r[col('F')]),
     e_taglio: vData(r[col('G')]), e_prep: vData(r[col('H')]), e_rma: vData(r[col('I')]), e_ting: vData(r[col('J')]), e_assemblaggio: vData(r[col('K')]),
     preparazione: vTxt(r[col('L')]), stato: vTxt(r[col('M')]) === 'Chiusa' ? 'Chiusa' : null, note: vTxt(r[col('N')]), creato_il: ora, modificato_il: ora }));
