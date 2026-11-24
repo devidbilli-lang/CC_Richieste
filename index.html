@@ -889,6 +889,7 @@ function classeCella(k, r) {
     case 'descrizione': c.push('c-desc'); break;
     case 'pz_ko': c.push('c-pz'); if (nr) c.push('nr'); else if (acc) c.push('acc'); break;
     case 'sku': c.push('c-centro', 'c-sku'); if (nr) c.push('nr'); break; // SKU in blu come la Descrizione
+    case 'stagione': c.push('c-centro', 'c-sku'); if (nr) c.push('nr'); break; // anche la stagione (collezione) in blu
     case 'data': c.push('c-centro'); if (nr) c.push('nr'); else if (acc) c.push('acc'); break;
     case 'bollettino': case 'conceria': case 'preparazione': c.push('c-centro'); if (nr) c.push('nr'); break;
     case 'team_leader': c.push('c-tl'); if (nr) c.push('nr'); break;
