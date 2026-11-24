@@ -171,6 +171,9 @@ tr.riga-nuova td.c-auto{background:#e6e6e6!important;color:#555;font-style:norma
 .replica{position:absolute;top:2px;right:2px;z-index:2;display:none;width:20px;height:20px;border-radius:50%;border:1.5px solid #BDFF23;background:#fff;color:#5E8A00;font-size:12px;font-weight:700;line-height:16px;padding:0;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .replica:hover{background:#BDFF23;color:#111}
 tr.riga-nuova td:hover .replica,tr.riga-nuova td:focus-within .replica{display:block}
+#an-tab td{position:relative}
+#an-tab td:hover .replica,.tab-ce td:hover .replica,.tab-ce td:focus-within .replica{display:block}
+.tab-ce td{position:relative}
 @media (hover:none){tr.riga-nuova td:focus-within .replica{display:block;width:26px;height:26px;line-height:22px}}
 .badge-nuova{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;letter-spacing:.04em}
 body.con-nuove .fab{bottom:96px}
@@ -2301,7 +2304,7 @@ const TAB = {
 };
 function cambiaTabDb(k) {
   if (S.filtri.anaTab === 'componenti' && S.ce && S.ce.modificato && k !== 'componenti' && !confirm(`Le modifiche a ${S.ce.pf} non sono salvate. Uscire comunque?`)) return;
-  S.filtri.anaTab = k; S.filtri.anaQ = ''; vistaAnagrafiche();
+  S.filtri.anaTab = k; S.filtri.anaQ = ''; S.filtri.anaOrd = ''; vistaAnagrafiche();
 }
 function vistaAnagrafiche() {
   const t = S.filtri.anaTab || 'componenti';
@@ -2310,11 +2313,12 @@ function vistaAnagrafiche() {
   if (t === 'componenti') return vistaComponentiDb();
   $('#an-extra').innerHTML = `<span class="sub nascosto" id="an-selinfo"></span><button class="btn peric nascosto" id="an-elimina" onclick="eliminaSelAna()"></button>
       <span class="sub" id="an-info"></span>
-      ${t === 'distinta' ? `<input id="an-pf" list="dl-art-db" placeholder="Articolo: Codice PF o descrizione…" value="${esc(S.filtri.dibaPf || '')}" style="width:260px" autocomplete="off">
+      ${t === 'distinta' ? `<div class="filtro-cerca"><input id="an-pf" list="dl-art-db" placeholder="Articolo: Codice PF o descrizione…" value="${esc(S.filtri.dibaPf || '')}" style="width:260px" autocomplete="off"></div>
         <datalist id="dl-art-db">${[...S.art.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([c, d]) => `<option value="${esc(c + ' — ' + (d || ''))}">`).join('')}</datalist>
         <button class="btn prim" onclick="apriImportDiba()">Importa da Excel</button>` : ''}
       ${['articoli', 'distinta'].includes(t) ? `<select id="an-stag" class="filtro-sel ${S.filtri.anaSt ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], S.filtri.anaSt || '', 'Tutte le collezioni')}${t === 'distinta' ? `<option value="-" ${S.filtri.anaSt === '-' ? 'selected' : ''}>Senza collezione (vale per tutte)</option>` : ''}</select>` : ''}
-      <input id="an-q" placeholder="Cerca…" value="${esc(S.filtri.anaQ || '')}" style="width:200px"><button class="btn" onclick="caricaAna()">Cerca</button>`;
+      <div class="filtro-cerca"><input id="an-q" placeholder="Cerca…" value="${esc(S.filtri.anaQ || '')}" autocomplete="off"></div>`;
+  { let tq; $('#an-q').addEventListener('input', () => { clearTimeout(tq); tq = setTimeout(() => caricaAna(), 350); }); } // ricerca mentre scrivi
   if ($('#an-stag')) $('#an-stag').addEventListener('change', e => { S.filtri.anaSt = e.target.value; e.target.classList.toggle('att', !!e.target.value); caricaAna(); });
   $('#an-corpo').innerHTML = `<div id="an-imp"></div><div id="an-tab"></div>`;
   S.selAna = new Set();
@@ -2604,7 +2608,7 @@ function disegnaTuttiCe() {
   if (barra && !$('#ct-q')) { // la barra si disegna una volta: la ricerca non perde il cursore
     barra.innerHTML = `<span class="sub" id="ct-art"></span><div class="pillole" id="ct-vedi"></div>
       <select id="ct-stag" class="filtro-sel ${t.st ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], t.st || '', 'Tutte le collezioni')}</select>
-      <input id="ct-q" placeholder="Cerca articolo, componente, materiale…" value="${esc(t.q)}" style="width:230px" autocomplete="off">
+      <div class="filtro-cerca"><input id="ct-q" placeholder="Cerca articolo, componente, materiale…" value="${esc(t.q)}" style="width:240px" autocomplete="off"></div>
       <span class="info-db" title="Rosso: da compilare nel componente. Giallo: manca nella Distinta base (codice materiale o € Prezzo). 0 vale come compilato; gli accessori non hanno lavorazioni, quindi non hanno celle rosse; le infustiture sono rosse solo se manca il tempo di taglio; sec. Ting. e sec. RMA vuoti non contano come mancanti. Viola: componente principale con rinforzi. Clic su una riga: si apre l'articolo sul campo da compilare.">i</span>`;
     $('#ct-stag').addEventListener('change', e => { t.st = e.target.value; e.target.classList.toggle('att', !!t.st); disegnaTuttiCe(); });
     const qi = $('#ct-q'); let tm;
@@ -2772,8 +2776,8 @@ function disegnaCe() {
       <td class="sub c-centro">${i + 1}</td>
       <td class="ce-nome">${r.padreUid ? '<span class="freccia-rinf">↳</span>' : ''}<input data-f="componente" value="${esc(r.componente)}" title="${esc(r.componente)}" placeholder="${r.padreUid ? 'Nome rinforzo' : 'Nome componente'}"></td>
       <td><select data-f="padre"><option value="">— principale —</option>${principaliCe(r.uid).filter(p => !nRinf(r.uid) || p.uid === r.padreUid).map(p => `<option value="${p.uid}" ${p.uid === r.padreUid ? 'selected' : ''}>${esc(p.componente)}</option>`).join('')}</select></td>
-      <td><input data-f="n_materiale" list="dl-tipologie" value="${esc(r.n_materiale)}"></td>
-      ${CE_NUM.map(k => `<td><input data-f="${k}" inputmode="decimal" value="${esc(String(r[k] ?? '').replace('.', ','))}"></td>`).join('')}
+      <td><input data-f="n_materiale" list="dl-tipologie" value="${esc(r.n_materiale)}"><button type="button" class="replica" data-rep="n_materiale" tabindex="-1" title="Copia questo valore sulle righe spuntate (senza righe spuntate: su tutte)">⇊</button></td>
+      ${CE_NUM.map(k => `<td><input data-f="${k}" inputmode="decimal" value="${esc(String(r[k] ?? '').replace('.', ','))}"><button type="button" class="replica" data-rep="${k}" tabindex="-1" title="Copia questo valore sulle righe spuntate (senza righe spuntate: su tutte)">⇊</button></td>`).join('')}
       <td class="sub c-ro">${esc(r.codice_materiale || '')}</td><td class="sub c-ro ce-descr" title="${esc(r.descr_materiale || '')}">${esc(r.descr_materiale || '')}</td>
       <td class="n sub c-ro">${fmt(r.prezzo, 2)}</td><td class="sub c-ro">${esc(r.tm || '')}</td>
       <td style="white-space:nowrap">${r.padreUid ? '' : `<button class="btn picc" onclick="aggiungiRinforzo(${r.uid})" title="Aggiungi un rinforzo sotto questo componente">+ rinf.</button>`}
@@ -2791,6 +2795,18 @@ function disegnaCe() {
     const r = rigaCe(e.target); r[f] = e.target.value; if (r.id) { r.mod = true; e.target.closest('tr').classList.add('ce-mod'); } segna();
   });
   if (!c.sel) c.sel = new Set();
+  // ⇊ copia il valore della cella sulle righe spuntate (senza righe spuntate: su tutte le altre)
+  tb.addEventListener('pointerdown', e => { if (e.target.closest('.replica')) e.preventDefault(); }, true);
+  tb.addEventListener('click', e => {
+    const b = e.target.closest('.replica'); if (!b) return;
+    const src = rigaCe(b), k = b.dataset.rep, v = src[k] ?? '';
+    const dest = c.righe.filter(r => r !== src && (c.sel.size ? c.sel.has(r.uid) : true));
+    if (!dest.length) return toast('Nessuna altra riga su cui copiare', 'err');
+    if (!c.sel.size && !confirm(`Copiare «${v === '' ? 'vuoto' : v}» su tutte le altre ${dest.length} righe?\n(Per copiarlo solo su alcune, spunta prima le righe.)`)) return;
+    dest.forEach(r => { r[k] = v; if (r.id) r.mod = true; });
+    c.modificato = true; disegnaCe(); aggiornaStatoCe();
+    toast(`Copiato su ${dest.length} ${dest.length === 1 ? 'riga' : 'righe'}: ricorda di salvare`, 'ok');
+  });
   $('#ce-tutti').addEventListener('change', e => { c.sel = new Set(e.target.checked ? c.righe.map(r => r.uid) : []); $$('.tab-ce [data-sel]').forEach(x => { x.checked = e.target.checked; }); aggiornaSelCe(); });
   let ultimoSel = null;
   tb.addEventListener('click', e => { // Maiusc + clic seleziona un intervallo
@@ -2953,20 +2969,22 @@ async function caricaAna(offset = 0, opz = {}) {
   S.filtri.anaQ = $('#an-q').value.trim();
   const w0 = $('#an-tab .tabwrap'), pos = opz.mantieni && w0 ? { t: w0.scrollTop, l: w0.scrollLeft, y: window.scrollY } : null; // dopo un salvataggio si resta dove si stava lavorando
   try {
-    const r = await api('/api/admin/tabella/' + t, { query: { q: S.filtri.anaQ, limit: 200, offset, pf: t === 'distinta' ? codiceDaArt(S.filtri.dibaPf) : '', stagione: ['articoli', 'distinta'].includes(t) ? S.filtri.anaSt || '' : '' } });
+    const r = await api('/api/admin/tabella/' + t, { query: { q: S.filtri.anaQ, limit: 200, offset, pf: t === 'distinta' ? codiceDaArt(S.filtri.dibaPf) : '', stagione: ['articoli', 'distinta'].includes(t) ? S.filtri.anaSt || '' : '',
+      ord: S.filtri.anaOrd || '', dir: S.filtri.anaDir || '' } });
     if (!$('#an-tab')) return;
     S.cache.ana = r.righe;
     const cfg = TAB[t];
     $('#an-info').textContent = `${fmtN(r.totale)} record${r.totale > 200 ? ` · ${offset + 1}-${offset + r.righe.length}` : ''}`;
     S.filtri.anaTot = r.totale; S.filtri.anaOff = offset;
-    $('#an-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th class="c-sel"><input type="checkbox" id="an-tutti" title="Seleziona tutte le righe della pagina"></th>${cfg.c.map(c => `<th class="${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' ? 'c-ro' : ''}" ${c[2] === 'ro' ? 'title="Calcolata: non si modifica"' : ''}>${c[1]}</th>`).join('')}<th></th></tr></thead>
-      <tbody>${r.righe.map((x, i) => `<tr data-id="${x.id}" class="${S.selAna.has(x.id) ? 'sel' : ''}"><td class="c-sel"><input type="checkbox" data-sel="${x.id}" ${S.selAna.has(x.id) ? 'checked' : ''}></td>${cfg.c.map(c => `<td class="${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' ? 'c-ro' : ''}">${c[2] === 'n' ? fmtN(x[c[0]]) : esc(x[c[0]] ?? '')}</td>`).join('')}
+    $('#an-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th class="c-sel"><input type="checkbox" id="an-tutti" title="Seleziona tutte le righe della pagina"></th>${cfg.c.map(c => `<th class="ord ${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' ? 'c-ro' : ''}" onclick="ordinaAna('${c[0]}')" title="${c[2] === 'ro' ? 'Calcolata: non si modifica · ' : ''}Ordina">${c[1]}${S.filtri.anaOrd === c[0] ? `<span class="freccia">${S.filtri.anaDir === 'desc' ? '▼' : '▲'}</span>` : '<span class="freccia spenta">▲▼</span>'}</th>`).join('')}<th></th></tr></thead>
+      <tbody>${r.righe.map((x, i) => `<tr data-id="${x.id}" class="${S.selAna.has(x.id) ? 'sel' : ''}"><td class="c-sel"><input type="checkbox" data-sel="${x.id}" ${S.selAna.has(x.id) ? 'checked' : ''}></td>${cfg.c.map(c => `<td class="${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' ? 'c-ro' : ''}">${c[2] === 'n' ? fmtN(x[c[0]]) : esc(x[c[0]] ?? '')}${copiabile(t, c) ? `<button type="button" class="replica" data-rep="${c[0]}" data-i="${i}" title="Copia questo valore sulle righe spuntate">⇊</button>` : ''}</td>`).join('')}
         <td><button class="icona" onclick="editAna(${i})">✎</button></td></tr>`).join('')}</tbody></table></div>
       <div class="riga-flex" style="justify-content:center;margin:10px">${offset > 0 ? `<button class="btn" onclick="caricaAna(${Math.max(0, offset - 200)})">← Precedenti</button>` : ''}
         ${offset + r.righe.length < r.totale ? `<button class="btn" onclick="caricaAna(${offset + 200})">Successivi →</button>` : ''}</div>`;
     const tb = $('#an-tab tbody'); let ultimo = null;
     $('#an-tutti').addEventListener('change', e => { r.righe.forEach(x => e.target.checked ? S.selAna.add(x.id) : S.selAna.delete(x.id)); $$('#an-tab [data-sel]').forEach(cb => { cb.checked = e.target.checked; }); aggiornaSelAna(); });
     tb.addEventListener('click', e => {
+      const rb = e.target.closest('.replica'); if (rb) { e.stopPropagation(); return copiaCellaAna(t, r.righe[Number(rb.dataset.i)], rb.dataset.rep); }
       const el = e.target.closest('[data-sel]'); if (!el) return;
       const id = Number(el.dataset.sel), ord = r.righe.map(x => x.id);
       if (e.shiftKey && ultimo !== null) {
@@ -2984,6 +3002,24 @@ async function caricaAna(offset = 0, opz = {}) {
       tr.classList.add('evidenzia');
     }
   } catch (e) { toast(e.message, 'err'); }
+}
+// ⇊ su una cella: il suo valore va sulle righe spuntate (stesso campo)
+const NON_COPIABILI = { articoli: ['codice', 'stagione'], distinta: ['codice_pf'], componenti: ['chiave', 'codice_pf', 'componente', 'padre', 'stagione'] };
+const copiabile = (t, c) => c[2] !== 'ro' && !(NON_COPIABILI[t] || []).includes(c[0]);
+async function copiaCellaAna(t, riga, campo) {
+  const ids = [...S.selAna].filter(id => id !== riga.id);
+  const nome = (TAB[t].c.find(c => c[0] === campo) || [, campo])[1], v = riga[campo] ?? '';
+  if (!ids.length) return toast(`Spunta prima le righe su cui copiare «${v === '' ? 'vuoto' : v}» (${nome})`, 'err');
+  if (!confirm(`Copiare «${v === '' ? 'vuoto' : v}» nella colonna ${nome} su ${ids.length} ${ids.length === 1 ? 'riga spuntata' : 'righe spuntate'}?`)) return;
+  try {
+    const r = await api(`/api/admin/tabella/${t}/copia`, { method: 'POST', body: { ids, campo, valore: v } });
+    toast(`Copiato su ${fmtN(r.aggiornate)} ${r.aggiornate === 1 ? 'riga' : 'righe'}`, 'ok');
+    caricaAna(S.filtri.anaOff || 0, { mantieni: true });
+  } catch (e) { toast(e.message, 'err'); }
+}
+function ordinaAna(k) { // clic sull'intestazione: ordina per quella colonna (secondo clic: al contrario)
+  if (S.filtri.anaOrd === k) S.filtri.anaDir = S.filtri.anaDir === 'desc' ? 'asc' : 'desc'; else { S.filtri.anaOrd = k; S.filtri.anaDir = 'asc'; }
+  caricaAna();
 }
 function aggiornaSelAna() {
   const n = S.selAna.size, b = $('#an-elimina'), info = $('#an-selinfo'), tutti = $('#an-tutti'); if (!b) return;
