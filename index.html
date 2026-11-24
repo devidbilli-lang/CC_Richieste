@@ -937,7 +937,7 @@ function vistaFoglio() {
       <div class="pillole">${PERIODI.map(([k, t]) => `<button data-p="${k}" class="${!f.sett && f.periodo === k ? 'att' : ''}">${t}</button>`).join('')}</div>
       <select id="r-stato" class="filtro-sel" title="Stato">${[['', 'Tutti gli stati'], ['aperte', 'Aperte'], ['da_elaborare', 'Da elaborare'], ['in_corso', 'In corso'], ['chiusa', 'Chiuse'], ['non_richiedere', 'Non richiedere']]
         .map(([k, t]) => `<option value="${k}" ${f.stato === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      ${(S.stagioniTutte || []).length > 1 ? `<select id="r-stag" class="filtro-sel ${f.stagione ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte, f.stagione || '', 'Tutte le collezioni')}</select>` : ''}
+      <select id="r-stag" class="filtro-sel ${f.stagione ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], f.stagione || '', 'Tutte le collezioni')}</select>
       <span class="sub" id="r-info"></span>
       <div class="spazio" style="flex:1"></div>
       <button class="icona" onclick="esportaRighe()" title="Esporta CSV">⤓ CSV</button>
@@ -2313,7 +2313,9 @@ function vistaAnagrafiche() {
       ${t === 'distinta' ? `<input id="an-pf" list="dl-art-db" placeholder="Articolo: Codice PF o descrizione…" value="${esc(S.filtri.dibaPf || '')}" style="width:260px" autocomplete="off">
         <datalist id="dl-art-db">${[...S.art.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([c, d]) => `<option value="${esc(c + ' — ' + (d || ''))}">`).join('')}</datalist>
         <button class="btn prim" onclick="apriImportDiba()">Importa da Excel</button>` : ''}
+      ${['articoli', 'distinta'].includes(t) ? `<select id="an-stag" class="filtro-sel ${S.filtri.anaSt ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], S.filtri.anaSt || '', 'Tutte le collezioni')}${t === 'distinta' ? `<option value="-" ${S.filtri.anaSt === '-' ? 'selected' : ''}>Senza collezione (vale per tutte)</option>` : ''}</select>` : ''}
       <input id="an-q" placeholder="Cerca…" value="${esc(S.filtri.anaQ || '')}" style="width:200px"><button class="btn" onclick="caricaAna()">Cerca</button>`;
+  if ($('#an-stag')) $('#an-stag').addEventListener('change', e => { S.filtri.anaSt = e.target.value; e.target.classList.toggle('att', !!e.target.value); caricaAna(); });
   $('#an-corpo').innerHTML = `<div id="an-imp"></div><div id="an-tab"></div>`;
   S.selAna = new Set();
   fabDb(`Aggiungi a ${TAB[t].t}`, () => editAna(null));
@@ -2592,7 +2594,7 @@ function tornaATuttiCe() {
 function disegnaTuttiCe() {
   const t = S.ct, box = $('#ce-elenco'); if (!box || !t.righe) return;
   const q = t.q.trim().toLowerCase();
-  const tutte = t.righe.filter(c => !q || (c.codice_pf + ' ' + (c.stagione || '') + ' ' + c.componente + ' ' + (S.art.get(c.codice_pf) || '') + ' ' + (c.n_materiale || '') + ' ' + (c.codice_materiale || '')).toLowerCase().includes(q));
+  const tutte = t.righe.filter(c => (!t.st || (c.stagione || '') === t.st) && (!q || (c.codice_pf + ' ' + (c.stagione || '') + ' ' + c.componente + ' ' + (S.art.get(c.codice_pf) || '') + ' ' + (c.n_materiale || '') + ' ' + (c.codice_materiale || '')).toLowerCase().includes(q)));
   const lista = tutte.filter(c => t.vedi === 'tutti' || (t.vedi === 'manca' ? c.manca.length : !c.manca.length));
   const nManca = tutte.filter(c => c.manca.length).length;
   const pagina = lista; // tutte le righe in un'unica tabella da scorrere
@@ -2601,8 +2603,10 @@ function disegnaTuttiCe() {
   const barra = $('#ct-barra');
   if (barra && !$('#ct-q')) { // la barra si disegna una volta: la ricerca non perde il cursore
     barra.innerHTML = `<span class="sub" id="ct-art"></span><div class="pillole" id="ct-vedi"></div>
+      <select id="ct-stag" class="filtro-sel ${t.st ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], t.st || '', 'Tutte le collezioni')}</select>
       <input id="ct-q" placeholder="Cerca articolo, componente, materiale…" value="${esc(t.q)}" style="width:230px" autocomplete="off">
       <span class="info-db" title="Rosso: da compilare nel componente. Giallo: manca nella Distinta base (codice materiale o € Prezzo). 0 vale come compilato; gli accessori non hanno lavorazioni, quindi non hanno celle rosse; le infustiture sono rosse solo se manca il tempo di taglio; sec. Ting. e sec. RMA vuoti non contano come mancanti. Viola: componente principale con rinforzi. Clic su una riga: si apre l'articolo sul campo da compilare.">i</span>`;
+    $('#ct-stag').addEventListener('change', e => { t.st = e.target.value; e.target.classList.toggle('att', !!t.st); disegnaTuttiCe(); });
     const qi = $('#ct-q'); let tm;
     qi.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { t.q = qi.value; t.pag = 0; disegnaTuttiCe(); }, 250); });
   }
@@ -2949,7 +2953,7 @@ async function caricaAna(offset = 0, opz = {}) {
   S.filtri.anaQ = $('#an-q').value.trim();
   const w0 = $('#an-tab .tabwrap'), pos = opz.mantieni && w0 ? { t: w0.scrollTop, l: w0.scrollLeft, y: window.scrollY } : null; // dopo un salvataggio si resta dove si stava lavorando
   try {
-    const r = await api('/api/admin/tabella/' + t, { query: { q: S.filtri.anaQ, limit: 200, offset, pf: t === 'distinta' ? codiceDaArt(S.filtri.dibaPf) : '' } });
+    const r = await api('/api/admin/tabella/' + t, { query: { q: S.filtri.anaQ, limit: 200, offset, pf: t === 'distinta' ? codiceDaArt(S.filtri.dibaPf) : '', stagione: ['articoli', 'distinta'].includes(t) ? S.filtri.anaSt || '' : '' } });
     if (!$('#an-tab')) return;
     S.cache.ana = r.righe;
     const cfg = TAB[t];
