@@ -1440,7 +1440,7 @@ function formRiga(r, pre) {
   const corpo = `
     <div class="griglia">
       ${!nuova && isMag() ? `<label class="campo">Codice richiesta<input id="e-numero" value="${esc(r.numero || '')}"></label>` : ''}
-      <label class="campo">Preparazione<input id="e-prep" value="${esc(pf ? prepDi(pf, stF) || d.preparazione || '' : d.preparazione || '')}" readonly class="c-auto" title="Si compila da sola dall'articolo (Database › Articoli)"></label>
+      <label class="campo">Preparazione<input id="e-prep" value="${esc(nuova ? (pf ? prepDi(pf, stF) : '') : d.preparazione || '')}" readonly class="c-auto" title="${nuova ? "Si compila da sola dall'articolo (Database › Articoli)" : "Quella registrata quando la riga è stata salvata: cambia solo se la riga passa a un altro articolo"}"></label>
       <label class="campo">Data<input type="date" id="e-data" value="${esc(d.data || '')}" max="${giorniFa(-7)}" ${ro}></label>
       <label class="campo">Bollettino<input id="e-boll" value="${esc(d.bollettino || '')}" ${ro}></label>
       <label class="campo">Conceria<select id="e-conc" ${dis}>${opzioni(S.ana.concerie, d.conceria)}</select></label>
@@ -1482,7 +1482,7 @@ function formRiga(r, pre) {
     }
     const st = $('#e-stag').value;
     $('#e-comp').innerHTML = opzioniComponenti(S.compPerPf.has(p) ? p : '', diPf(cur, p) && compsDi(p, st).some(c => c.chiave === cur) ? cur : '', st);
-    if ($('#e-prep')) $('#e-prep').value = prepDi(p, st);
+    if ($('#e-prep')) $('#e-prep').value = !nuova && pfDa(r.componente) === p && (r.stagione || '') === (st || '') ? r.preparazione || '' : prepDi(p, st); // riga salvata sullo stesso articolo: resta la sua
     $('#e-comp').disabled = !S.compPerPf.has(p);
     art.classList.toggle('errato', !!p && !S.compPerPf.has(p));
     anteprima();
