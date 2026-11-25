@@ -184,8 +184,8 @@ tr.riga-nuova td:hover .replica,tr.riga-nuova td:focus-within .replica{display:b
 #an-tab td:hover .replica,.tab-ce td:hover .replica,.tab-ce td:focus-within .replica{display:block}
 .tab-ce td{position:relative}
 @media (hover:none){tr.riga-nuova td:focus-within .replica{display:block;width:26px;height:26px;line-height:22px}}
-.tavolozza{border:1px solid var(--bordo);background:#fff;border-radius:8px;width:30px;height:26px;cursor:pointer;font-size:13px;padding:0;line-height:1}
-.tavolozza:hover{border-color:#111}
+.tavolozza{border:2px solid var(--ciano-bordo);background:#fff;color:#111;border-radius:8px;width:32px;height:28px;cursor:pointer;padding:0;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.tavolozza:hover{background:var(--ciano)}
 td.col-tav,th.col-tav{width:1%;padding:4px 3px!important}
 .palette{display:grid;grid-template-columns:repeat(10,22px);gap:4px}
 .palette button{width:22px;height:22px;border-radius:4px;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
@@ -1802,7 +1802,7 @@ function disegnaAvanzamento() {
   const note = (q, i) => isMag() ? `<span style="cursor:pointer" onclick="modificaNote(${i})">${esc(q.note || '') || '<span class="sub">+ nota</span>'}</span>` : esc(q.note || '');
   const art = q => esc(q.codice_articolo || q.sku_righe || '');
   const fondo = q => q.colore ? ` style="background:${esc(q.colore)};color:${testoSu(q.colore)}"` : ''; // colore scelto dalla palette: Articolo e Descrizione
-  const tav = (q, i) => isMag() ? `<button class="tavolozza" onclick="popColore(event,${i})" title="Colore di Articolo e Descrizione"${q.colore ? ` style="background:${esc(q.colore)}"` : ''}>🎨</button>` : '';
+  const tav = (q, i) => isMag() ? `<button class="tavolozza" onclick="popColore(event,${i})" title="Colore di Articolo e Descrizione"${q.colore ? ` style="background:${esc(q.colore)};color:${testoSu(q.colore)}"` : ''}>${ICONA_PENNELLO}</button>` : '';
   if (acc) {
     $('#av-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th>N°</th><th>Articolo</th><th>Elaborata</th><th>Richiedente</th><th class="n">Righe</th><th class="n">Pz</th>
       <th style="text-align:center">Data consegna</th><th>Stato</th><th>Note</th></tr></thead>
@@ -1832,6 +1832,7 @@ const PALETTE = [
   '#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79',
   '#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47',
   '#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'];
+const ICONA_PENNELLO = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L12 14.8 9.2 12z"/><path d="M9.2 12c-2 0-3.6 1.4-3.9 3.4-.3 1.9-1.1 3.3-2.8 4.1 3.4 1.2 7.6.6 9.2-2.1.8-1.3.6-2.8-.3-3.8"/></svg>';
 const testoSu = c => { const n = parseInt(String(c).slice(1), 16), r = n >> 16, g = n >> 8 & 255, b = n & 255; return (r * 299 + g * 587 + b * 114) / 1000 < 140 ? '#fff' : '#000'; }; // scritta leggibile sui colori scuri
 function popColore(ev, i) {
   const q = S.cache.rich[i];
