@@ -184,6 +184,13 @@ tr.riga-nuova td:hover .replica,tr.riga-nuova td:focus-within .replica{display:b
 #an-tab td:hover .replica,.tab-ce td:hover .replica,.tab-ce td:focus-within .replica{display:block}
 .tab-ce td{position:relative}
 @media (hover:none){tr.riga-nuova td:focus-within .replica{display:block;width:26px;height:26px;line-height:22px}}
+.tavolozza{border:1px solid var(--bordo);background:#fff;border-radius:8px;width:30px;height:26px;cursor:pointer;font-size:13px;padding:0;line-height:1}
+.tavolozza:hover{border-color:#111}
+td.col-tav,th.col-tav{width:1%;padding:4px 3px!important}
+.palette{display:grid;grid-template-columns:repeat(5,30px);gap:7px}
+.palette button{width:30px;height:30px;border-radius:50%;border:2px solid rgba(0,0,0,.15);cursor:pointer;padding:0}
+.palette button:hover{transform:scale(1.12)}
+.palette button.on{border:3px solid #111}
 .badge-nuova{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:2px 5px;font-size:10px;font-weight:700;letter-spacing:.02em}
 body.con-nuove .fab{bottom:96px}
 body.con-nuove #toast{bottom:96px}
@@ -1791,6 +1798,8 @@ function disegnaAvanzamento() {
   const stato = (q, i) => isMag() ? `<button class="btn picc" onclick="toggleChiusa(${i})">${badgeRich(q)}</button>` : badgeRich(q);
   const note = (q, i) => isMag() ? `<span style="cursor:pointer" onclick="modificaNote(${i})">${esc(q.note || '') || '<span class="sub">+ nota</span>'}</span>` : esc(q.note || '');
   const art = q => esc(q.codice_articolo || q.sku_righe || '');
+  const fondo = q => q.colore ? ` style="background:${esc(q.colore)}"` : ''; // colore scelto dalla palette: Articolo e Descrizione
+  const tav = (q, i) => isMag() ? `<button class="tavolozza" onclick="popColore(event,${i})" title="Colore di Articolo e Descrizione"${q.colore ? ` style="background:${esc(q.colore)}"` : ''}>🎨</button>` : '';
   if (acc) {
     $('#av-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th>N°</th><th>Articolo</th><th>Elaborata</th><th>Richiedente</th><th class="n">Righe</th><th class="n">Pz</th>
       <th style="text-align:center">Data consegna</th><th>Stato</th><th>Note</th></tr></thead>
@@ -1800,18 +1809,26 @@ function disegnaAvanzamento() {
     return;
   }
   const prep = (q, i) => isMag() ? `<select class="sel-prep" onchange="aggiornaRich(${i},{preparazione:this.value||null})">${opzioni(S.ana.preparazioni || [], q.preparazione)}</select>` : esc(q.preparazione || '');
-  $('#av-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th>N°</th><th>Articolo</th><th>Descrizione</th><th>Elaborata</th><th>Richiedente</th><th class="n">Righe</th><th class="n">Pz</th>
+  $('#av-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th>N°</th><th>Articolo</th><th>Descrizione</th>${isMag() ? '<th class="col-tav"></th>' : ''}<th>Elaborata</th><th>Richiedente</th><th class="n">Righe</th><th class="n">Pz</th>
     ${MINUTI_RQ.map(m => `<th style="text-align:center">${m[1]}</th>`).join('')}
     ${REPARTI.map(r => `<th style="text-align:center">${r[1]}</th>`).join('')}<th>Preparazione che lavora</th><th>Stato</th><th>Note</th></tr></thead>
     <tbody>${L.map((q, i) => `<tr>
-      <td><a href="#" onclick="apriDettaglio(${q.id});return false"><b>${esc(q.numero)}</b></a></td><td>${art(q)}</td><td>${esc(q.descrizione || S.art.get(q.codice_articolo || q.sku_righe) || '')}</td>
+      <td><a href="#" onclick="apriDettaglio(${q.id});return false"><b>${esc(q.numero)}</b></a></td><td${fondo(q)}>${art(q)}</td><td${fondo(q)}>${esc(q.descrizione || S.art.get(q.codice_articolo || q.sku_righe) || '')}</td>${isMag() ? `<td class="col-tav">${tav(q, i)}</td>` : ''}
       <td>${dIt(q.data_elab)}</td><td>${esc(q.richiedente || '')}</td><td class="n">${fmtN(q.n_righe)}</td><td class="n">${fmtN(q.pz)}</td>
       ${MINUTI_RQ.map(m => `<td style="text-align:center">${cellaMin(q, i, m[0])}</td>`).join('')}
       ${REPARTI.map(r => `<td style="text-align:center">${cellaRep(q, i, r[0])}</td>`).join('')}
       <td>${prep(q, i)}</td><td>${stato(q, i)}</td><td class="wrap">${note(q, i)}</td></tr>`).join('')}</tbody></table></div>`;
 }
+const PALETTE = ['#fff176', '#ffcc80', '#ef9a9a', '#f48fb1', '#ce93d8', '#9fa8da', '#90caf9', '#80deea', '#a5d6a7', '#d4e157', '#bdff23', '#bcaaa4', '#cfd8dc'];
+function popColore(ev, i) {
+  const q = S.cache.rich[i];
+  apriPop(ev, `<h4>N° ${esc(q.numero)} · colore</h4>
+    <div class="palette">${PALETTE.map(c => `<button class="${q.colore === c ? 'on' : ''}" style="background:${c}" title="${c}" onclick="salvaColore(${i},'${c}')"></button>`).join('')}</div>
+    <div class="riga-flex" style="margin-top:10px;justify-content:flex-end"><button class="btn picc" onclick="salvaColore(${i},null)">Nessun colore</button></div>`);
+}
+async function salvaColore(i, c) { chiudiPop(); await aggiornaRich(i, { colore: c }); }
 function chiudiPop() { const p = $('#pop'); if (p) p.remove(); }
-document.addEventListener('mousedown', e => { const p = $('#pop'); if (p && !p.contains(e.target) && !e.target.closest('.cella-rep')) chiudiPop(); });
+document.addEventListener('mousedown', e => { const p = $('#pop'); if (p && !p.contains(e.target) && !e.target.closest('.cella-rep, .tavolozza')) chiudiPop(); });
 function apriPop(ev, html) {
   chiudiPop();
   const b = ev.currentTarget.getBoundingClientRect();
