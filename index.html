@@ -81,6 +81,9 @@ input.errato{border-color:var(--rosso);background:var(--rosso-chiaro)}
 /* griglie «come Excel»: celle scelte, quadratino da trascinare, anteprima del riempimento */
 td.xsel [data-f]{outline:2px solid #1a73e8;outline-offset:-1px;box-shadow:inset 0 0 0 999px rgba(26,115,232,.10)}
 td.xfill [data-f]{outline:2px dashed #1a73e8;outline-offset:-1px}
+#an-tab td.xsel{box-shadow:inset 0 0 0 2px #1a73e8;background-image:linear-gradient(rgba(26,115,232,.10),rgba(26,115,232,.10))}
+#an-tab td.xfill{box-shadow:inset 0 0 0 2px #1a73e8;outline:1px dashed #1a73e8;outline-offset:-3px}
+#an-tab td[data-ed]{cursor:cell}
 .maniglia{position:absolute;width:9px;height:9px;background:#1a73e8;border:2px solid #fff;border-radius:2px;box-shadow:0 0 0 1px #1a73e8;cursor:crosshair;z-index:6}
 table{border-collapse:collapse;width:100%}
 th,td{padding:6px 8px;border-bottom:1px dotted #c9c9c9;text-align:center;vertical-align:middle;white-space:nowrap;font-family:"Montserrat",system-ui,sans-serif}
@@ -189,7 +192,7 @@ tr.riga-nuova td.c-auto{background:#e6e6e6!important;color:#555;font-style:norma
 table.foglio td.c-tot,tr.riga-nuova td.c-auto.c-tot{color:#d00000;font-weight:600} /* Totale € in rosso */ /* righe nuove: celle che si compilano da sole (non a mano) */
 .replica{position:absolute;top:2px;right:2px;z-index:2;display:none;width:20px;height:20px;border-radius:50%;border:1.5px solid #BDFF23;background:#fff;color:#5E8A00;font-size:12px;font-weight:700;line-height:16px;padding:0;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .replica:hover{background:#BDFF23;color:#111}
-tr.riga-nuova .replica,.tab-ce .replica{display:none!important} /* righe nuove e componenti: ora si copia con Ctrl+C/V e il quadratino blu */
+tr.riga-nuova .replica,.tab-ce .replica,#an-tab .replica{display:none!important} /* righe nuove e componenti: ora si copia con Ctrl+C/V e il quadratino blu */
 tr.riga-nuova td:hover .replica,tr.riga-nuova td:focus-within .replica{display:block}
 #an-tab td{position:relative}
 #an-tab td:hover .replica,.tab-ce td:hover .replica,.tab-ce td:focus-within .replica{display:block}
@@ -1243,10 +1246,21 @@ function adattaCasella(el) { // solo dove il browser non sa allargare da solo le
 const GRIGLIE = [
   { righeSel: '#r-tab tr.riga-nuova', chiave: 'n', aggiungi: () => { aggiungiNuova(); } },
   { righeSel: '.tab-ce tbody tr[data-uid]', chiave: 'uid', aggiungi: () => { aggiungiCe({}, 'componente'); } },
+  { righeSel: '#an-tab tbody tr[data-id]', chiave: 'id', tabella: true, aggiungi: () => { } },
 ];
+let XPEND = []; // tabelle del Database: modifiche da salvare insieme
+async function xSalvaPend() {
+  if (!XPEND.length) return 0;
+  const mod = XPEND; XPEND = [];
+  try {
+    const r = await api('/api/admin/tabella/' + (S.filtri.anaTab || 'componenti') + '/valori', { method: 'POST', body: { modifiche: mod } });
+    await caricaAna(S.filtri.anaOff || 0, { mantieni: true });
+    return r.aggiornate || mod.length;
+  } catch (e) { toast(e.message, 'err'); return 0; }
+}
 let XS = null, xTrascina = false, xRiempi = null, xManiglia = null;
 const xCampo = td => td && td.querySelector('input[data-f], select[data-f], textarea[data-f]');
-const xOk = td => { const el = xCampo(td); return !!el && !el.disabled && !el.readOnly && el.type !== 'checkbox'; };
+const xOk = td => { if (td && td.dataset && td.dataset.k && td.closest('#an-tab')) return td.dataset.ed === '1'; const el = xCampo(td); return !!el && !el.disabled && !el.readOnly && el.type !== 'checkbox'; };
 const xGriglia = td => { const tr = td && td.closest('tr'); return tr ? GRIGLIE.find(g => tr.matches(g.righeSel)) : null; };
 const xRighe = g => $$(g.righeSel);
 const xColonne = tr => [...tr.cells].filter(xOk).map(td => td.cellIndex); // solo le celle che si scrivono a mano
@@ -1267,10 +1281,14 @@ function xMostra() {
   xManiglia.style.left = (rc.right - wr.left + w.scrollLeft - 6) + 'px'; xManiglia.style.top = (rc.bottom - wr.top + w.scrollTop - 6) + 'px';
 }
 new MutationObserver(() => { if (XS && !xTrascina && !xRiempi) { clearTimeout(xMostra.t); xMostra.t = setTimeout(xMostra, 60); } }).observe(document.body, { childList: true, subtree: true });
-function xLeggi(td) { const el = xCampo(td); return el ? el.value : ''; }
+function xLeggi(td) {
+  if (td.dataset.k && td.closest('#an-tab')) { const x = (S.cache.ana || []).find(r => String(r.id) === td.parentElement.dataset.id); const v = x ? x[td.dataset.k] : ''; return v === null || v === undefined ? '' : typeof v === 'number' ? String(v).replace('.', ',') : String(v); }
+  const el = xCampo(td); return el ? el.value : '';
+}
 function xScrivi(g, chiave, col, v) { // scrive come se l'avesse scritto l'utente (così valgono tutti i controlli della riga)
   const tr = $$(g.righeSel).find(t => t.dataset[g.chiave] === chiave); if (!tr) return false;
   const td = tr.cells[col]; if (!xOk(td)) return false;
+  if (g.tabella) { XPEND.push({ id: Number(chiave), campo: td.dataset.k, valore: String(v ?? '').trim() }); return true; } // si salva tutto insieme alla fine
   const el = xCampo(td); v = String(v ?? '').trim();
   if (el.tagName === 'SELECT') {
     const o = [...el.options].find(o => o.value === v) || [...el.options].find(o => o.textContent.trim().toLowerCase() === v.toLowerCase());
@@ -1345,6 +1363,7 @@ document.addEventListener('mouseup', e => {
     if (xScrivi(F.g, chiavi[r], c, v) || (v !== sorg[c][0] && xScrivi(F.g, chiavi[r], c, xSerie(sorg[c], off, true)))) n++;
   }
   XS = { g: F.g, r0: Math.min(F.r0, F.a), r1: Math.max(F.r1, F.a), c0: F.c0, c1: F.c1 }; xMostra();
+  if (F.g.tabella) { if (n) xSalvaPend().then(k => k && toast(`Salvate ${k} ${k === 1 ? 'cella' : 'celle'}`, 'ok')); return; }
   if (n) toast(`Compilate ${n} ${n === 1 ? 'cella' : 'celle'}` + (F.g.chiave === 'uid' ? ': ricorda di salvare' : ''), 'ok');
 });
 document.addEventListener('focusin', e => { // con Tab o con un clic la cella scelta segue la casella attiva
@@ -1375,6 +1394,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     const righe = xRighe(XS.g), chiavi = righe.map(tr => tr.dataset[XS.g.chiave]);
     for (let r = I.r0; r <= I.r1; r++) for (const c of xColonne(righe[r])) if (c >= I.c0 && c <= I.c1) xScrivi(XS.g, chiavi[r], c, '');
+    if (XS.g.tabella) { if (confirm('Svuotare le celle scelte? Il Database si aggiorna subito.')) xSalvaPend().then(k => k && toast(`Svuotate ${k} celle`, 'ok')); else XPEND = []; }
     xMostra();
   }
 });
@@ -1392,7 +1412,7 @@ document.addEventListener('paste', e => {
     const chiavi = righe.map(tr => tr.dataset[g.chiave]);
     for (let r = I.r0; r <= I.r1; r++) for (const c of xColonne(righe[r])) if (c >= I.c0 && c <= I.c1 && xScrivi(g, chiavi[r], c, m[0][0])) n++;
   } else { // tabella copiata (anche da Excel): dalla prima cella scelta in giù e a destra, sulle colonne che si scrivono a mano
-    while (righe.length < I.r0 + m.length) { const prima = righe.length; g.aggiungi(); righe = xRighe(g); if (righe.length === prima) break; }
+    if (!g.tabella) while (righe.length < I.r0 + m.length) { const prima = righe.length; g.aggiungi(); righe = xRighe(g); if (righe.length === prima) break; }
     const chiavi = righe.map(tr => tr.dataset[g.chiave]);
     m.forEach((riga, i) => {
       const r = I.r0 + i; if (r >= righe.length) return;
@@ -1407,6 +1427,7 @@ document.addEventListener('paste', e => {
     XS = { g, r0: I.r0, r1: Math.min(I.r0 + m.length - 1, xRighe(g).length - 1), c0: I.c0, c1: I.c0 };
   }
   xMostra();
+  if (g.tabella) { if (n) xSalvaPend().then(k => k && toast(`Incollate e salvate ${k} celle`, 'ok')); return; }
   toast(n ? `Incollat${n === 1 ? 'a 1 cella' : 'e ' + n + ' celle'}` + (g.chiave === 'uid' ? ': ricorda di salvare' : '') : 'Niente da incollare: i valori non corrispondono alle voci delle caselle', n ? 'ok' : 'err');
 }, true);
 function eventiNuove() {
@@ -3349,7 +3370,7 @@ async function caricaAna(offset = 0, opz = {}) {
     $('#an-info').textContent = `${fmtN(r.totale)} record${r.totale > 200 ? ` · ${offset + 1}-${offset + r.righe.length}` : ''}`;
     S.filtri.anaTot = r.totale; S.filtri.anaOff = offset;
     $('#an-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th class="c-sel"><input type="checkbox" id="an-tutti" title="Seleziona tutte le righe della pagina"></th>${cfg.c.map(c => `<th class="ord ${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' ? 'c-ro' : ''}" onclick="ordinaAna('${c[0]}')" title="${c[2] === 'ro' ? 'Calcolata: non si modifica · ' : ''}Ordina">${c[1]}${S.filtri.anaOrd === c[0] ? `<span class="freccia">${S.filtri.anaDir === 'desc' ? '▼' : '▲'}</span>` : '<span class="freccia spenta">▲▼</span>'}</th>`).join('')}<th></th></tr></thead>
-      <tbody>${r.righe.map((x, i) => `<tr data-id="${x.id}" class="${S.selAna.has(x.id) ? 'sel' : ''}"><td class="c-sel"><input type="checkbox" data-sel="${x.id}" ${S.selAna.has(x.id) ? 'checked' : ''}></td>${cfg.c.map(c => `<td class="${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' || daItems(x, c) ? 'c-ro' : ''}"${daItems(x, c) ? ' title="Da Items BC"' : ''}>${c[2] === 'n' ? fmtN(x[c[0]]) : esc(x[c[0]] ?? '')}${copiabile(t, c) && !daItems(x, c) ? `<button type="button" class="replica" data-rep="${c[0]}" data-i="${i}" title="Copia questo valore sulle righe spuntate">⇊</button>` : ''}</td>`).join('')}
+      <tbody>${r.righe.map((x, i) => `<tr data-id="${x.id}" class="${S.selAna.has(x.id) ? 'sel' : ''}"><td class="c-sel"><input type="checkbox" data-sel="${x.id}" ${S.selAna.has(x.id) ? 'checked' : ''}></td>${cfg.c.map(c => `<td data-k="${c[0]}"${copiabile(t, c) && !daItems(x, c) ? ' data-ed="1"' : ''} class="${c[2] === 'n' ? 'n' : ''} ${c[2] === 'ro' || daItems(x, c) ? 'c-ro' : ''}"${daItems(x, c) ? ' title="Da Items BC"' : ''}>${c[2] === 'n' ? fmtN(x[c[0]]) : esc(x[c[0]] ?? '')}${copiabile(t, c) && !daItems(x, c) ? `<button type="button" class="replica" data-rep="${c[0]}" data-i="${i}" title="Copia questo valore sulle righe spuntate">⇊</button>` : ''}</td>`).join('')}
         <td><button class="icona" onclick="editAna(${i})">✎</button></td></tr>`).join('')}</tbody></table></div>
       <div class="riga-flex" style="justify-content:center;margin:10px">${offset > 0 ? `<button class="btn" onclick="caricaAna(${Math.max(0, offset - 200)})">← Precedenti</button>` : ''}
         ${offset + r.righe.length < r.totale ? `<button class="btn" onclick="caricaAna(${offset + 200})">Successivi →</button>` : ''}</div>`;
