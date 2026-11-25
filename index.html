@@ -1121,7 +1121,7 @@ function mancanti(n) {
 }
 const NOMI_CAMPI = { data: 'data', sku: 'SKU', stagione: 'stagione', componente: 'componente', pz_ko: 'Pz KO', motivazione: 'motivazione', operatore: 'operatore (non in elenco)', team_leader: 'team leader (non in elenco)' };
 // righe nuove: ogni valore si può copiare su tutte le altre righe nuove (⇊), e una riga si può duplicare (⧉)
-const CAMPI_REPLICA = ['stato_elab', 'preparazione', 'data', 'bollettino', 'conceria', 'team_leader', 'sku', 'stagione', 'componente', 'pz_ko', 'motivazione', 'operatore', 'materiale', 'note'];
+const CAMPI_REPLICA = ['stato_elab', 'data', 'bollettino', 'conceria', 'team_leader', 'sku', 'stagione', 'componente', 'pz_ko', 'motivazione', 'operatore', 'materiale', 'note'];
 function cellaNuova(n, k) {
   const rep = S.nuove.length > 1 && CAMPI_REPLICA.includes(k) && (k !== 'stato_elab' || isMag())
     ? `<button type="button" class="replica" data-rep="${k}" tabindex="-1" title="Copia questo valore su tutte le righe nuove">⇊</button>` : '';
@@ -1133,7 +1133,7 @@ function cellaNuovaBase(n, k) {
     case 'numero': return '<span class="badge-nuova">NUOVA</span>';
     case 'stato_elab': return isMag() ? `<select data-f="stato_elab">${['Si', 'Non Richiedere'].map(x => `<option ${n.stato_elab === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`
       : `<span title="Gestito dal magazzino">${esc(n.stato_elab || 'Si')}</span>`;
-    case 'preparazione': return `<select data-f="preparazione" style="width:150px">${opzioni(S.ana.preparazioni || [], n.preparazione)}</select>`;
+    case 'preparazione': return `<span>${esc(n.preparazione || '')}</span>`; // automatica: dall'articolo, non si sceglie a mano
     case 'data': return `<input type="date" data-f="data" value="${esc(n.data)}" max="${giorniFa(-7)}" style="width:118px;padding:6px 3px">`;
     case 'bollettino': return `<input data-f="bollettino" value="${esc(n.bollettino)}" style="width:96px">`;
     case 'conceria': return `<select data-f="conceria" style="width:112px">${opzioni(S.ana.concerie, n.conceria)}</select>`;
@@ -1156,7 +1156,7 @@ function cellaNuovaBase(n, k) {
   }
 }
 // righe nuove: colonne che l'app compila da sola (grigie, come le colonne calcolate del Database)
-const AUTO_NUOVA = { scheda: 'È la scheda scelta in alto', numero: 'Lo assegna il magazzino', descrizione: 'Si compila da sola dallo SKU', responsabilita: 'Si compila da sola dalla motivazione',
+const AUTO_NUOVA = { preparazione: "Si compila da sola dall'articolo (Database › Articoli)", scheda: 'È la scheda scelta in alto', numero: 'Lo assegna il magazzino', descrizione: 'Si compila da sola dallo SKU', responsabilita: 'Si compila da sola dalla motivazione',
   minuti: 'Si calcola al salvataggio', totale_eur: 'Si calcola al salvataggio', stato: 'Si calcola da solo' };
 function rigaNuovaHtml(n, j, cols) {
   const r = pseudoRiga(n);
@@ -1176,6 +1176,7 @@ function replicaCampo(j, f) {
     if ((f === 'componente' || f === 'stagione') && x.sku !== src.sku) { saltate++; return; } // componente e collezione valgono solo per lo stesso articolo
     x[f] = src[f]; fatte++;
     if (f === 'sku') { if (!diPf(x.componente, src.sku)) x.componente = ''; x.stagione = src.stagione; }
+    if (f === 'sku' || f === 'stagione') x.preparazione = prepDi(x.sku, x.stagione); // la preparazione segue l'articolo
     if (!compNuova(x)) x.componente = '';
   });
   salvaNuoveLocale(); ridisegnaNuoveFermo(); aggiornaBarraNuove();
@@ -1207,13 +1208,14 @@ function eventiNuove() {
       const cod = codiceDaArt(el.value); n.sku = cod; el.value = cod;
       if (!stagioniCon(cod).includes(n.stagione)) n.stagione = stagDef(cod); // collezione più recente dell'articolo
       if (!diPf(n.componente, cod) || !compNuova(n)) n.componente = '';
-      if (!n.preparazione && prepDi(cod, n.stagione)) { n.preparazione = prepDi(cod, n.stagione); const tp = $('td[data-k="preparazione"]', tr); if (tp) tp.innerHTML = cellaNuova(n, 'preparazione'); }
+      n.preparazione = prepDi(cod, n.stagione); { const tp = $('td[data-k="preparazione"]', tr); if (tp) tp.innerHTML = cellaNuova(n, 'preparazione'); }
       const ts = $('td[data-k="stagione"]', tr); if (ts) ts.innerHTML = cellaNuova(n, 'stagione');
       const td = $('td[data-k="componente"]', tr); td.innerHTML = cellaNuova(n, 'componente');
       el.classList.toggle('errato', !!cod && !S.compPerPf.has(cod));
       if (S.compPerPf.has(cod) && e.type === 'change') $('select', td).focus();
     } else if (f === 'stagione') { // altra stagione: il componente resta se esiste anche lì
-      n.stagione = el.value;
+      n.stagione = el.value; n.preparazione = prepDi(n.sku, n.stagione);
+      { const tp = $('td[data-k="preparazione"]', tr); if (tp) tp.innerHTML = cellaNuova(n, 'preparazione'); }
       if (!compNuova(n)) n.componente = '';
       const td = $('td[data-k="componente"]', tr); if (td) td.innerHTML = cellaNuova(n, 'componente');
     } else n[f] = el.value;
@@ -1287,7 +1289,7 @@ function aggiungiNuova() {
   if (!S.nuove.length) S.nuoveScheda = schedaFoglio(); // si possono aprire più righe nuove e salvarle tutte insieme
   const p = S.nuove.length ? S.nuove[S.nuove.length - 1] : (S.ultimi || {});
   const st = p.sku && stagioniCon(p.sku).includes(p.stagione) ? p.stagione : (p.sku ? stagDef(p.sku) : '');
-  S.nuove.push({ stato_elab: isMag() ? (p.stato_elab || 'Si') : 'Si', preparazione: p.preparazione || (p.sku ? prepDi(p.sku, st) : ''), data: p.data || oggi(), bollettino: p.bollettino || '', conceria: p.conceria || '',
+  S.nuove.push({ stato_elab: isMag() ? (p.stato_elab || 'Si') : 'Si', preparazione: p.sku ? prepDi(p.sku, st) : '', data: p.data || oggi(), bollettino: p.bollettino || '', conceria: p.conceria || '',
     team_leader: p.team_leader ?? (S.opSet.has(S.profilo.nome) ? S.profilo.nome : ''), sku: p.sku || '', stagione: st, componente: '', pz_ko: '', motivazione: '', operatore: '', materiale: '', note: '' });
   salvaNuoveLocale();
   disegnaRighe();
@@ -1438,7 +1440,7 @@ function formRiga(r, pre) {
   const corpo = `
     <div class="griglia">
       ${!nuova && isMag() ? `<label class="campo">Codice richiesta<input id="e-numero" value="${esc(r.numero || '')}"></label>` : ''}
-      <label class="campo">Preparazione<select id="e-prep" ${dis}>${opzioni(S.ana.preparazioni || [], d.preparazione ?? (pf ? prepDi(pf, stF) : ''))}</select></label>
+      <label class="campo">Preparazione<input id="e-prep" value="${esc(pf ? prepDi(pf, stF) || d.preparazione || '' : d.preparazione || '')}" readonly class="c-auto" title="Si compila da sola dall'articolo (Database › Articoli)"></label>
       <label class="campo">Data<input type="date" id="e-data" value="${esc(d.data || '')}" max="${giorniFa(-7)}" ${ro}></label>
       <label class="campo">Bollettino<input id="e-boll" value="${esc(d.bollettino || '')}" ${ro}></label>
       <label class="campo">Conceria<select id="e-conc" ${dis}>${opzioni(S.ana.concerie, d.conceria)}</select></label>
@@ -1480,7 +1482,7 @@ function formRiga(r, pre) {
     }
     const st = $('#e-stag').value;
     $('#e-comp').innerHTML = opzioniComponenti(S.compPerPf.has(p) ? p : '', diPf(cur, p) && compsDi(p, st).some(c => c.chiave === cur) ? cur : '', st);
-    if ($('#e-prep') && !$('#e-prep').value && prepDi(p, st)) $('#e-prep').value = prepDi(p, st);
+    if ($('#e-prep')) $('#e-prep').value = prepDi(p, st);
     $('#e-comp').disabled = !S.compPerPf.has(p);
     art.classList.toggle('errato', !!p && !S.compPerPf.has(p));
     anteprima();
