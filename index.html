@@ -184,6 +184,8 @@ tr.riga-nuova td:hover .replica,tr.riga-nuova td:focus-within .replica{display:b
 #an-tab td:hover .replica,.tab-ce td:hover .replica,.tab-ce td:focus-within .replica{display:block}
 .tab-ce td{position:relative}
 @media (hover:none){tr.riga-nuova td:focus-within .replica{display:block;width:26px;height:26px;line-height:22px}}
+.opz-escl{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;cursor:pointer;margin-right:18px;white-space:nowrap}
+.opz-escl input{width:auto;margin:0;accent-color:#5E8A00}
 .tavolozza{border:2px solid var(--ciano-bordo);background:#fff;color:#111;border-radius:8px;width:32px;height:28px;cursor:pointer;padding:0;line-height:1;display:inline-flex;align-items:center;justify-content:center}
 .tavolozza:hover{background:var(--ciano)}
 td.col-tav,th.col-tav{width:1%;padding:4px 3px!important}
@@ -1758,11 +1760,13 @@ function vistaAvanzamento() {
     </div><div class="riga-flex" style="margin-top:12px"><button class="btn prim" onclick="caricaAvanzamento()">Cerca</button>
       <span class="sub" id="av-info"></span></div></div>
     ${f.tipo === 'accessori' ? '' : `<div class="card no-print" id="av-riep"><div class="riga-flex"><b style="flex:1">Minuti di preparazione per preparazione</b>
+      <label class="opz-escl" title="Toglie i minuti di preparazione delle righe con Responsabilità «Preparazione» rilavorate dalla stessa preparazione che le aveva fatte"><input type="checkbox" id="av-escl" ${f.escludi ? 'checked' : ''}> Escludi i loro errori (Responsabilità Preparazione)</label>
       <label class="campo" style="flex-direction:row;align-items:center;gap:8px">Mese di entrata in preparazione<input type="month" id="av-mese" value="${esc(f.mese)}" style="width:auto"></label></div>
       <div id="av-riep-c" class="kpi" style="margin-top:10px"></div></div>`}
     <div id="av-tab"><div class="vuoto">Caricamento…</div></div>`;
   $$('#av-tipo button').forEach(b => b.addEventListener('click', () => { if (f.tipo === b.dataset.t) return; f.tipo = b.dataset.t; vistaAvanzamento(); }));
   $$('#vista .card select, #vista .card input[type=date], #av-mese').forEach(el => el.addEventListener('change', caricaAvanzamento));
+  if ($('#av-escl')) $('#av-escl').addEventListener('change', e => { f.escludi = e.target.checked; disegnaRiepPrep(); });
   $('#av-q').addEventListener('keydown', e => { if (e.key === 'Enter') caricaAvanzamento(); });
   if (isMag()) fabDb(f.tipo === 'accessori' ? 'Nuova richiesta accessori senza righe' : 'Nuova richiesta senza righe', nuovaRichiestaManuale);
   caricaAvanzamento();
@@ -1777,10 +1781,17 @@ async function caricaAvanzamento() {
     if (!$('#av-tab') || seq !== S.seqAv) return;
     S.cache.rich = r.richieste;
     disegnaAvanzamento();
-    const box = $('#av-riep-c');
-    if (box) box.innerHTML = r.riepilogo.righe.length ? r.riepilogo.righe.map(x => `<div>${esc(x.preparazione)}<b>${fmt(x.minuti, 2)}</b><small class="sub" style="margin-left:6px">${fmtN(x.n)} richieste</small></div>`).join('')
-      : `<span class="sub">Nessuna richiesta entrata in preparazione nel mese.</span>`;
+    S.cache.riep = r.riepilogo; disegnaRiepPrep();
   } catch (e) { toast(e.message, 'err'); }
+}
+function disegnaRiepPrep() { // minuti per preparazione nel mese; con «Escludi i loro errori» i minuti da pagare
+  const box = $('#av-riep-c'), R = S.cache.riep; if (!box || !R) return;
+  const escl = !!S.filtri.av.escludi;
+  box.innerHTML = R.righe.length ? R.righe.map(x => escl && x.esclusi > 0
+      ? `<div title="Minuti totali ${fmt(x.minuti, 2)} − ${fmt(x.esclusi, 2)} di righe con Responsabilità «Preparazione» fatte da ${esc(x.preparazione)} stessa">${esc(x.preparazione)} · da pagare<b>${fmt(x.da_pagare, 2)}</b>
+          <small class="sub" style="margin-left:6px">su ${fmt(x.minuti, 2)} · esclusi ${fmt(x.esclusi, 2)} · ${fmtN(x.n)} richieste</small></div>`
+      : `<div>${esc(x.preparazione)}<b>${fmt(x.minuti, 2)}</b><small class="sub" style="margin-left:6px">${fmtN(x.n)} richieste${escl ? ' · nessun errore loro' : ''}</small></div>`).join('')
+    : `<span class="sub">Nessuna richiesta entrata in preparazione nel mese.</span>`;
 }
 function cellaRep(rq, i, k) {
   const campo = k === 'consegna' ? 'data_consegna' : 'e_' + k, d = rq[campo];
