@@ -187,10 +187,13 @@ tr.riga-nuova td:hover .replica,tr.riga-nuova td:focus-within .replica{display:b
 .tavolozza{border:1px solid var(--bordo);background:#fff;border-radius:8px;width:30px;height:26px;cursor:pointer;font-size:13px;padding:0;line-height:1}
 .tavolozza:hover{border-color:#111}
 td.col-tav,th.col-tav{width:1%;padding:4px 3px!important}
-.palette{display:grid;grid-template-columns:repeat(5,30px);gap:7px}
-.palette button{width:30px;height:30px;border-radius:50%;border:2px solid rgba(0,0,0,.15);cursor:pointer;padding:0}
-.palette button:hover{transform:scale(1.12)}
-.palette button.on{border:3px solid #111}
+.palette{display:grid;grid-template-columns:repeat(10,22px);gap:4px}
+.palette button{width:22px;height:22px;border-radius:4px;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
+.palette button:hover{transform:scale(1.2);box-shadow:0 0 0 2px #fff,0 0 0 3px #111}
+.palette button.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #111}
+.pop.pop-largo{width:auto;min-width:0}
+.altro-col{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.altro-col input{width:34px;height:26px;padding:0;border:1px solid var(--bordo);border-radius:6px;cursor:pointer;background:#fff}
 .badge-nuova{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:2px 5px;font-size:10px;font-weight:700;letter-spacing:.02em}
 body.con-nuove .fab{bottom:96px}
 body.con-nuove #toast{bottom:96px}
@@ -1798,7 +1801,7 @@ function disegnaAvanzamento() {
   const stato = (q, i) => isMag() ? `<button class="btn picc" onclick="toggleChiusa(${i})">${badgeRich(q)}</button>` : badgeRich(q);
   const note = (q, i) => isMag() ? `<span style="cursor:pointer" onclick="modificaNote(${i})">${esc(q.note || '') || '<span class="sub">+ nota</span>'}</span>` : esc(q.note || '');
   const art = q => esc(q.codice_articolo || q.sku_righe || '');
-  const fondo = q => q.colore ? ` style="background:${esc(q.colore)}"` : ''; // colore scelto dalla palette: Articolo e Descrizione
+  const fondo = q => q.colore ? ` style="background:${esc(q.colore)};color:${testoSu(q.colore)}"` : ''; // colore scelto dalla palette: Articolo e Descrizione
   const tav = (q, i) => isMag() ? `<button class="tavolozza" onclick="popColore(event,${i})" title="Colore di Articolo e Descrizione"${q.colore ? ` style="background:${esc(q.colore)}"` : ''}>🎨</button>` : '';
   if (acc) {
     $('#av-tab').innerHTML = `<div class="tabwrap tab-alta"><table><thead><tr><th>N°</th><th>Articolo</th><th>Elaborata</th><th>Richiedente</th><th class="n">Righe</th><th class="n">Pz</th>
@@ -1819,12 +1822,25 @@ function disegnaAvanzamento() {
       ${REPARTI.map(r => `<td style="text-align:center">${cellaRep(q, i, r[0])}</td>`).join('')}
       <td>${prep(q, i)}</td><td>${stato(q, i)}</td><td class="wrap">${note(q, i)}</td></tr>`).join('')}</tbody></table></div>`;
 }
-const PALETTE = ['#fff176', '#ffcc80', '#ef9a9a', '#f48fb1', '#ce93d8', '#9fa8da', '#90caf9', '#80deea', '#a5d6a7', '#d4e157', '#bdff23', '#bcaaa4', '#cfd8dc'];
+// palette completa (grigi, colori pieni e 6 gradazioni per colore) + «Altro colore…» per sceglierne uno qualsiasi
+const PALETTE = [
+  '#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff',
+  '#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff', '#ff00ff',
+  '#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc',
+  '#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6', '#d5a6bd',
+  '#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3', '#c27ba0',
+  '#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79',
+  '#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47',
+  '#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'];
+const testoSu = c => { const n = parseInt(String(c).slice(1), 16), r = n >> 16, g = n >> 8 & 255, b = n & 255; return (r * 299 + g * 587 + b * 114) / 1000 < 140 ? '#fff' : '#000'; }; // scritta leggibile sui colori scuri
 function popColore(ev, i) {
   const q = S.cache.rich[i];
   apriPop(ev, `<h4>N° ${esc(q.numero)} · colore</h4>
     <div class="palette">${PALETTE.map(c => `<button class="${q.colore === c ? 'on' : ''}" style="background:${c}" title="${c}" onclick="salvaColore(${i},'${c}')"></button>`).join('')}</div>
-    <div class="riga-flex" style="margin-top:10px;justify-content:flex-end"><button class="btn picc" onclick="salvaColore(${i},null)">Nessun colore</button></div>`);
+    <div class="riga-flex" style="margin-top:10px;justify-content:space-between;flex-wrap:nowrap">
+      <label class="altro-col" title="Scegli un colore qualsiasi">Altro colore… <input type="color" value="${esc(q.colore || '#bdff23')}" onchange="salvaColore(${i},this.value)"></label>
+      <button class="btn picc" onclick="salvaColore(${i},null)">Nessun colore</button></div>`);
+  $('#pop').classList.add('pop-largo');
 }
 async function salvaColore(i, c) { chiudiPop(); await aggiornaRich(i, { colore: c }); }
 function chiudiPop() { const p = $('#pop'); if (p) p.remove(); }
