@@ -181,6 +181,14 @@ body.con-nuove #toast{bottom:96px}
 .filtri{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .filtro-sel{width:auto;border:3px solid var(--ciano);border-radius:999px;padding:6px 12px;font-size:13px;background:#fff}
 .filtro-sel.att{background:#BDFF23;color:#111;border-color:#BDFF23}
+/* filtro Collezione a scelta multipla */
+.multi-st{position:relative;display:inline-block}
+.multi-st>.filtro-sel{cursor:pointer;white-space:nowrap}
+.multi-pop{position:absolute;z-index:60;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--bordo);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:8px;min-width:210px;max-height:min(70vh,480px);overflow:auto}
+.multi-pop label{display:flex;gap:8px;align-items:center;padding:4px 6px;font-size:13px;cursor:pointer;white-space:nowrap;border-radius:6px}
+.multi-pop label:hover{background:#f3f3f3}
+.multi-pop input{width:auto;margin:0}
+.multi-az{display:flex;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--bordo)}
 .filtro-cerca input{width:220px;border:3px solid var(--ciano);border-radius:999px;padding:6px 14px 6px 32px;font-size:13px;
   background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23888' stroke-width='2'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='m9.5 9.5 3.5 3.5'/%3E%3C/svg%3E") no-repeat 12px center}
 .pillole{display:inline-flex;border:3px solid var(--ciano);border-radius:999px;overflow:hidden;background:#fff}
@@ -878,6 +886,40 @@ async function aggiornaContaElabora() {
    FOGLIO (righe della scheda + inserimento con il "+")
    ===================================================================== */
 function opzioni(lista, sel, vuota = '—') { return `<option value="">${vuota}</option>` + lista.map(x => `<option ${x === sel ? 'selected' : ''}>${esc(x)}</option>`).join(''); }
+// --- Filtro Collezione a scelta multipla: tutte spuntate = nessun filtro; si tolgono le spunte alle collezioni da escludere ---
+const ST_SENZA = '-'; // righe senza collezione
+const stArr = v => Array.isArray(v) ? v : v ? [v] : []; // (i filtri salvati prima erano una sola collezione)
+function etichettaMultiSt(sel, lista) {
+  if (!sel.length) return 'Tutte le collezioni';
+  const nome = s => s === ST_SENZA ? 'senza collezione' : s, dentro = sel.filter(s => lista.includes(s));
+  if (!dentro.length) return 'Nessuna collezione';
+  const fuori = lista.filter(s => !dentro.includes(s));
+  if (fuori.length <= 2 && fuori.length < dentro.length) return 'Tutte tranne ' + fuori.map(nome).join(', ');
+  return dentro.length <= 2 ? dentro.map(nome).join(', ') : dentro.length + ' collezioni';
+}
+function htmlMultiSt(id, sel, senza) { // senza: testo della voce «senza collezione» (false = niente voce)
+  sel = stArr(sel);
+  const lista = [...(S.stagioniTutte || []), ...(senza ? [ST_SENZA] : [])], on = v => !sel.length || sel.includes(v);
+  return `<div class="multi-st" id="${id}"><button type="button" class="filtro-sel ${sel.length ? 'att' : ''}" title="Collezione: togli la spunta a quelle da escludere">${esc(etichettaMultiSt(sel, lista))} ▾</button>
+    <div class="multi-pop nascosto"><div class="multi-az"><button type="button" class="btn picc" data-az="1">Tutte</button><button type="button" class="btn picc" data-az="0">Nessuna</button></div>
+      ${lista.map(s => `<label><input type="checkbox" value="${esc(s)}" ${on(s) ? 'checked' : ''}> ${s === ST_SENZA ? esc(senza) : esc(s)}</label>`).join('')}</div></div>`;
+}
+function attivaMultiSt(id, cb) {
+  const box = $('#' + id); if (!box) return;
+  const bt = $('button.filtro-sel', box), pop = $('.multi-pop', box), lista = $$('input', pop).map(i => i.value);
+  bt.addEventListener('click', e => { e.stopPropagation(); $$('.multi-pop').forEach(x => { if (x !== pop) x.classList.add('nascosto'); }); pop.classList.toggle('nascosto'); });
+  pop.addEventListener('click', e => e.stopPropagation());
+  let tm;
+  const cambia = () => {
+    const sp = $$('input:checked', pop).map(i => i.value), v = sp.length === lista.length ? [] : sp.length ? sp : ['~']; // '~' = nessuna
+    bt.textContent = etichettaMultiSt(v, lista) + ' ▾'; bt.classList.toggle('att', v.length > 0);
+    clearTimeout(tm); tm = setTimeout(() => cb(v), 350); // si possono togliere più spunte di fila prima che la tabella si ricarichi
+  };
+  pop.addEventListener('change', cambia);
+  $$('[data-az]', pop).forEach(b => b.addEventListener('click', () => { $$('input', pop).forEach(i => { i.checked = b.dataset.az === '1'; }); cambia(); }));
+}
+document.addEventListener('click', () => $$('.multi-pop').forEach(x => x.classList.add('nascosto')));
+const filtroStOk = (sel, st) => { sel = stArr(sel); return !sel.length || sel.includes(st || ST_SENZA); };
 function codiceDaArt(v) { return String(v || '').split('—')[0].trim().toUpperCase(); }
 const COL_FOGLIO = [['numero', 'Codice Richiesta'], ['stato_elab', 'Stato Elaborazione'], ['preparazione', 'Preparazione'], ['data', 'Data'], ['bollettino', 'Bollettino'], ['conceria', 'Conceria'], ['team_leader', 'Team Leader'],
   ['sku', 'SKU'], ['stagione', 'Collezione'], ['componente', 'Componente'], ['descrizione', 'Descrizione'], ['pz_ko', 'Pz KO'], ['motivazione', 'Motivazione'], ['responsabilita', 'Responsabilità'], ['operatore', 'Operatore'],
@@ -941,7 +983,7 @@ function vistaFoglio() {
       <div class="pillole">${PERIODI.map(([k, t]) => `<button data-p="${k}" class="${!f.sett && f.periodo === k ? 'att' : ''}">${t}</button>`).join('')}</div>
       <select id="r-stato" class="filtro-sel" title="Stato">${[['', 'Tutti gli stati'], ['aperte', 'Aperte'], ['da_elaborare', 'Da elaborare'], ['in_corso', 'In corso'], ['chiusa', 'Chiuse'], ['non_richiedere', 'Non richiedere']]
         .map(([k, t]) => `<option value="${k}" ${f.stato === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      <select id="r-stag" class="filtro-sel ${f.stagione ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], f.stagione || '', 'Tutte le collezioni')}</select>
+      ${htmlMultiSt('r-stag', f.stagione, 'Senza collezione')}
       <span class="sub" id="r-info"></span>
       <div class="spazio" style="flex:1"></div>
       <button class="icona" onclick="esportaRighe()" title="Esporta CSV">⤓ CSV</button>
@@ -954,6 +996,7 @@ function vistaFoglio() {
   $('#r-q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => cercaRighe(), 350); });
   $('#r-q').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(t); cercaRighe(); } });
   $$('.filtri select').forEach(el => el.addEventListener('change', () => cercaRighe()));
+  attivaMultiSt('r-stag', v => { S.filtri.righe.stagione = v; cercaRighe(); });
   $$('.pillole button').forEach(b => b.addEventListener('click', () => {
     f.periodo = b.dataset.p; f.sett = ''; $('#r-sett').value = ''; $('#r-sett').classList.remove('att');
     $$('.pillole button').forEach(x => x.classList.toggle('att', x === b)); cercaRighe();
@@ -1007,14 +1050,13 @@ async function cercaRighe(altre) {
   if (!$('#r-q')) return;
   f.sett = $('#r-sett') ? $('#r-sett').value : ''; ({ dal: f.dal, al: f.al } = intervalloFiltro(f)); f.numero = ''; f.stato = $('#r-stato').value; f.q = $('#r-q').value.trim();
   if ($('#r-scheda')) f.scheda = $('#r-scheda').value;
-  f.stagione = $('#r-stag') ? $('#r-stag').value : '';
-  if ($('#r-stag')) $('#r-stag').classList.toggle('att', !!f.stagione);
+  f.stagione = stArr(f.stagione);
   aggiornaPiu();
   const offset = altre ? S.cache.righe.length : 0;
   const seq = S.seqRighe = (S.seqRighe || 0) + 1;
   $('#r-info').textContent = 'Caricamento…';
   try {
-    const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, stagione: f.stagione || '', q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 500, offset } });
+    const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, stagione: stArr(f.stagione).join(','), q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 500, offset } });
     if (!$('#r-tab') || seq !== S.seqRighe) return; // vista cambiata o risposta superata da una più recente
     S.cache.righe = altre ? S.cache.righe.concat(r.righe) : r.righe;
     S.cache.righeTot = r.totali;
@@ -1502,7 +1544,7 @@ async function esportaRighe() {
   try {
     let tutte = [], offset = 0, tot = 1;
     while (offset < tot) {
-      const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, stagione: f.stagione || '', q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 1000, offset } });
+      const r = await api('/api/righe', { query: { dal: f.dal, al: f.al, stato: f.stato, scheda: f.scheda, stagione: stArr(f.stagione).join(','), q: f.q, numero: f.numero, ord: f.ord, dir: f.dir, limit: 1000, offset } });
       tutte = tutte.concat(r.righe); tot = r.totali.n; offset += r.righe.length; if (!r.righe.length) break;
     }
     const cols = [['stato_calc', 'Stato'], ['scheda', 'Scheda'], ['numero', 'N° richiesta'], ['stato_elab', 'Stato elaborazione'], ['preparazione', 'Preparazione'], ['data', 'Data'], ['bollettino', 'Bollettino'],
@@ -2318,10 +2360,10 @@ function vistaAnagrafiche() {
       ${t === 'distinta' ? `<div class="filtro-cerca"><input id="an-pf" list="dl-art-db" placeholder="Articolo: Codice PF o descrizione…" value="${esc(S.filtri.dibaPf || '')}" style="width:260px" autocomplete="off"></div>
         <datalist id="dl-art-db">${[...S.art.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([c, d]) => `<option value="${esc(c + ' — ' + (d || ''))}">`).join('')}</datalist>
         <button class="btn prim" onclick="apriImportDiba()">Importa da Excel</button>` : ''}
-      ${['articoli', 'distinta'].includes(t) ? `<select id="an-stag" class="filtro-sel ${S.filtri.anaSt ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], S.filtri.anaSt || '', 'Tutte le collezioni')}${t === 'distinta' ? `<option value="-" ${S.filtri.anaSt === '-' ? 'selected' : ''}>Senza collezione (vale per tutte)</option>` : ''}</select>` : ''}
+      ${['articoli', 'distinta'].includes(t) ? htmlMultiSt('an-stag', S.filtri.anaSt, t === 'distinta' ? 'Senza collezione (vale per tutte)' : 'Senza collezione') : ''}
       <div class="filtro-cerca"><input id="an-q" placeholder="Cerca…" value="${esc(S.filtri.anaQ || '')}" autocomplete="off"></div>`;
   { let tq; $('#an-q').addEventListener('input', () => { clearTimeout(tq); tq = setTimeout(() => caricaAna(), 350); }); } // ricerca mentre scrivi
-  if ($('#an-stag')) $('#an-stag').addEventListener('change', e => { S.filtri.anaSt = e.target.value; e.target.classList.toggle('att', !!e.target.value); caricaAna(); });
+  attivaMultiSt('an-stag', v => { S.filtri.anaSt = v; caricaAna(); });
   $('#an-corpo').innerHTML = `<div id="an-imp"></div><div id="an-tab"></div>`;
   S.selAna = new Set();
   fabDb(`Aggiungi a ${TAB[t].t}`, () => editAna(null));
@@ -2640,7 +2682,7 @@ const PASSO_TT = 250; // righe di «Tutti i componenti» disegnate per volta
 function disegnaTuttiCe() {
   const t = S.ct, box = $('#ce-elenco'); if (!box || !t.righe) return;
   const q = t.q.trim().toLowerCase();
-  const tutte = t.righe.filter(c => (!t.st || (c.stagione || '') === t.st) && (!q || (c.codice_pf + ' ' + (c.stagione || '') + ' ' + c.componente + ' ' + (S.art.get(c.codice_pf) || '') + ' ' + (c.n_materiale || '') + ' ' + (c.codice_materiale || '')).toLowerCase().includes(q)));
+  const tutte = t.righe.filter(c => filtroStOk(t.st, c.stagione) && (!q || (c.codice_pf + ' ' + (c.stagione || '') + ' ' + c.componente + ' ' + (S.art.get(c.codice_pf) || '') + ' ' + (c.n_materiale || '') + ' ' + (c.codice_materiale || '')).toLowerCase().includes(q)));
   const lista = tutte.filter(c => t.vedi === 'tutti' || (t.vedi === 'manca' ? c.manca.length : !c.manca.length));
   const nManca = tutte.filter(c => c.manca.length).length;
   const pagina = lista; // tutte le righe in un'unica tabella da scorrere
@@ -2649,11 +2691,11 @@ function disegnaTuttiCe() {
   const barra = $('#ct-barra');
   if (barra && !$('#ct-q')) { // la barra si disegna una volta: la ricerca non perde il cursore
     barra.innerHTML = `<span class="sub" id="ct-art"></span><div class="pillole" id="ct-vedi"></div>
-      <select id="ct-stag" class="filtro-sel ${t.st ? 'att' : ''}" title="Collezione">${opzioni(S.stagioniTutte || [], t.st || '', 'Tutte le collezioni')}</select>
+      ${htmlMultiSt('ct-stag', t.st, 'Senza collezione')}
       <div class="filtro-cerca"><input id="ct-q" placeholder="Cerca articolo, componente, materiale…" value="${esc(t.q)}" style="width:240px" autocomplete="off"></div>
       <button class="btn" onclick="S.ct.ultimaTt && S.ct.ultimaTt()" title="Vai all'ultima riga della tabella">⇣ Ultima riga</button>
       <span class="info-db" title="Rosso: da compilare nel componente. Giallo: manca nella Distinta base (codice materiale o € Prezzo). 0 vale come compilato; gli accessori non hanno lavorazioni, quindi non hanno celle rosse; le infustiture sono rosse solo se manca il tempo di taglio; sec. Ting. e sec. RMA vuoti non contano come mancanti. Viola: componente principale con rinforzi. Clic su una riga: si apre l'articolo sul campo da compilare.">i</span>`;
-    $('#ct-stag').addEventListener('change', e => { t.st = e.target.value; e.target.classList.toggle('att', !!t.st); disegnaTuttiCe(); });
+    attivaMultiSt('ct-stag', v => { t.st = v; t.pag = 0; disegnaTuttiCe(); });
     const qi = $('#ct-q'); let tm;
     qi.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { t.q = qi.value; t.pag = 0; disegnaTuttiCe(); }, 250); });
   }
@@ -3037,7 +3079,7 @@ async function caricaAna(offset = 0, opz = {}) {
   S.filtri.anaQ = $('#an-q').value.trim();
   const w0 = $('#an-tab .tabwrap'), pos = opz.mantieni && w0 ? { t: w0.scrollTop, l: w0.scrollLeft, y: window.scrollY } : null; // dopo un salvataggio si resta dove si stava lavorando
   try {
-    const r = await api('/api/admin/tabella/' + t, { query: { q: S.filtri.anaQ, limit: 200, offset, pf: t === 'distinta' ? codiceDaArt(S.filtri.dibaPf) : '', stagione: ['articoli', 'distinta'].includes(t) ? S.filtri.anaSt || '' : '',
+    const r = await api('/api/admin/tabella/' + t, { query: { q: S.filtri.anaQ, limit: 200, offset, pf: t === 'distinta' ? codiceDaArt(S.filtri.dibaPf) : '', stagione: ['articoli', 'distinta'].includes(t) ? stArr(S.filtri.anaSt).join(',') : '',
       ord: S.filtri.anaOrd || '', dir: S.filtri.anaDir || '' } });
     if (!$('#an-tab')) return;
     if (opz.fine && offset + r.righe.length < r.totale) return caricaAna(Math.floor((r.totale - 1) / 200) * 200, opz); // nel frattempo sono arrivate altre righe
