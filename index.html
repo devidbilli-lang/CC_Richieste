@@ -533,6 +533,13 @@ tr.sel td{background:#fff4d6!important}
 /* effetto bolla su SKU e Collezione (Inserimento dati) */
 #r-tab .bolla,#av-riep-c .bolla{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #9fd400;background:radial-gradient(circle at 30% 25%,#fff 0,#f4ffd6 45%,#d6ff6e 100%);box-shadow:0 2px 4px rgba(0,0,0,.18),inset 0 -2px 3px rgba(0,0,0,.07),inset 0 2px 2px rgba(255,255,255,.9);font-weight:600;white-space:nowrap;line-height:1.4}
 #av-riep-c .bolla{margin-right:8px;font-weight:500}
+#av-riep{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--carta);border:1px solid var(--bordo);border-radius:var(--r);padding:6px 12px;margin-bottom:10px} /* riepilogo su una riga */
+#av-riep>b{font-size:13px;white-space:nowrap}
+#av-riep .kpi{margin:0;flex:1}
+#av-riep .kpi div{padding:4px 10px}
+#av-riep .opz-escl{margin-right:0}
+.av-mese-l,.av-date{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--tenue);white-space:nowrap}
+.av-date input.filtro-sel{padding:5px 10px}
 #av-mese{border-radius:999px;border:1px solid #9fd400;background:radial-gradient(circle at 30% 25%,#fff 0,#f4ffd6 45%,#d6ff6e 100%);box-shadow:0 2px 4px rgba(0,0,0,.18),inset 0 -2px 3px rgba(0,0,0,.07),inset 0 2px 2px rgba(255,255,255,.9);padding:5px 14px;font-weight:500;color:#111;cursor:pointer;transition:transform .12s,box-shadow .12s} /* mese a bolla come le preparazioni */
 #av-mese:focus{outline:none;transform:scale(1.04);box-shadow:0 0 0 3px rgba(189,255,35,.5),0 3px 6px rgba(0,0,0,.2),inset 0 2px 2px rgba(255,255,255,.9)}
 #r-tab tr.riga-nuova td[data-k="sku"] input,#r-tab tr.riga-nuova td[data-k="stagione"] select{border-radius:999px;border:1px solid #9fd400;background:radial-gradient(circle at 30% 25%,#fff 0,#f4ffd6 45%,#d6ff6e 100%);box-shadow:0 2px 4px rgba(0,0,0,.18),inset 0 -2px 3px rgba(0,0,0,.07),inset 0 2px 2px rgba(255,255,255,.9);padding-left:18px;padding-right:12px;font-weight:600;transition:transform .12s,box-shadow .12s}
@@ -2025,25 +2032,24 @@ const MINUTI_RQ = [['min_taglio', 'Minuti<br>Taglio'], ['min_prep', 'Minuti<br>P
 const isAcc = () => S.filtri.av && S.filtri.av.tipo === 'accessori';
 function vistaAvanzamento() {
   const f = S.filtri.av || (S.filtri.av = { tipo: '', stato: 'aperte', q: '', dal: '', al: '', mese: oggi().slice(0, 7) });
-  $('#vista').innerHTML = `<div class="card no-print">
-    <div class="riga-flex" style="margin-bottom:12px"><div class="pillole" id="av-tipo">${[['', 'Richieste'], ['accessori', 'Accessori']].map(([k, t]) => `<button type="button" class="${f.tipo === k ? 'att' : ''}" data-t="${k}">${t}</button>`).join('')}</div>
-      <span class="sub">${f.tipo === 'accessori' ? 'Richieste accessori: numerazione «N a», con data di consegna' : 'Entrate nei reparti, minuti e preparazione che lavora la richiesta'}</span></div>
-    <div class="griglia">
-      <label class="campo">Stato<select id="av-stato">${[['aperte', 'Aperte'], ['chiuse', 'Chiuse'], ['', 'Tutte']].map(([k, t]) => `<option value="${k}" ${f.stato === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-      <label class="campo">Elaborate dal<input type="date" id="av-dal" value="${esc(f.dal)}"></label>
-      <label class="campo">al<input type="date" id="av-al" value="${esc(f.al)}"></label>
-      <label class="campo largo">Cerca<input id="av-q" value="${esc(f.q)}" placeholder="N°, articolo, richiedente, preparazione, note…"></label>
-    </div><div class="riga-flex" style="margin-top:12px"><button class="btn prim" onclick="caricaAvanzamento()">Cerca</button>
-      <span class="sub" id="av-info"></span></div></div>
-    ${f.tipo === 'accessori' ? '' : `<div class="card no-print" id="av-riep"><div class="riga-flex"><b style="flex:1">Minuti di preparazione per preparazione</b>
-      <label class="opz-escl" title="Toglie i minuti di preparazione delle righe con Responsabilità «Preparazione» rilavorate dalla stessa preparazione che le aveva fatte"><input type="checkbox" id="av-escl" ${f.escludi ? 'checked' : ''}> Escludi i loro errori (Responsabilità Preparazione)</label>
-      <label class="campo" style="flex-direction:row;align-items:center;gap:8px">Mese di entrata in preparazione<input type="month" id="av-mese" value="${esc(f.mese)}" style="width:auto"></label></div>
-      <div id="av-riep-c" class="kpi" style="margin-top:10px"></div></div>`}
+  // filtri su una riga sola come in Inserimento dati: il foglio sale in alto
+  $('#vista').innerHTML = `<div class="filtri no-print">
+      <div class="pillole" id="av-tipo" title="${f.tipo === 'accessori' ? 'Richieste accessori: numerazione «N a», con data di consegna' : 'Entrate nei reparti, minuti e preparazione che lavora la richiesta'}">${[['', 'Richieste'], ['accessori', 'Accessori']].map(([k, t]) => `<button type="button" class="${f.tipo === k ? 'att' : ''}" data-t="${k}">${t}</button>`).join('')}</div>
+      <div class="filtro-cerca"><input id="av-q" value="${esc(f.q)}" placeholder="Cerca…" title="N°, articolo, richiedente, preparazione, note…" autocomplete="off"></div>
+      <select id="av-stato" class="filtro-sel" title="Stato">${[['aperte', 'Aperte'], ['chiuse', 'Chiuse'], ['', 'Tutte']].map(([k, t]) => `<option value="${k}" ${f.stato === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <label class="av-date" title="Elaborate dal … al …">Elaborate dal<input type="date" id="av-dal" class="filtro-sel" value="${esc(f.dal)}">al<input type="date" id="av-al" class="filtro-sel" value="${esc(f.al)}"></label>
+      <span class="sub" id="av-info"></span>
+    </div>
+    ${f.tipo === 'accessori' ? '' : `<div class="no-print" id="av-riep"><b>Minuti di preparazione</b>
+      <div id="av-riep-c" class="kpi"></div>
+      <label class="opz-escl" title="Toglie i minuti di preparazione delle righe con Responsabilità «Preparazione» rilavorate dalla stessa preparazione che le aveva fatte"><input type="checkbox" id="av-escl" ${f.escludi ? 'checked' : ''}> Escludi i loro errori</label>
+      <label class="av-mese-l" title="Mese di entrata in preparazione">Mese<input type="month" id="av-mese" value="${esc(f.mese)}"></label></div>`}
     <div id="av-tab"><div class="vuoto">Caricamento…</div></div>`;
   $$('#av-tipo button').forEach(b => b.addEventListener('click', () => { if (f.tipo === b.dataset.t) return; f.tipo = b.dataset.t; vistaAvanzamento(); }));
-  $$('#vista .card select, #vista .card input[type=date], #av-mese').forEach(el => el.addEventListener('change', caricaAvanzamento));
+  $$('#av-stato, #av-dal, #av-al, #av-mese').forEach(el => el.addEventListener('change', caricaAvanzamento));
+  let tq; $('#av-q').addEventListener('input', () => { clearTimeout(tq); tq = setTimeout(caricaAvanzamento, 400); });
   if ($('#av-escl')) $('#av-escl').addEventListener('change', e => { f.escludi = e.target.checked; disegnaRiepPrep(); });
-  $('#av-q').addEventListener('keydown', e => { if (e.key === 'Enter') caricaAvanzamento(); });
+  $('#av-q').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(tq); caricaAvanzamento(); } });
   if (isMag()) fabDb(f.tipo === 'accessori' ? 'Nuova richiesta accessori senza righe' : 'Nuova richiesta senza righe', nuovaRichiestaManuale);
   caricaAvanzamento();
 }
